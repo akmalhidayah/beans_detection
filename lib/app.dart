@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'core/constants/app_strings.dart';
 import 'core/theme/app_theme.dart';
-import 'screens/splash/splash_screen.dart';
+import 'screens/splash_screen.dart';
 
 class CoffeeQualityApp extends StatelessWidget {
   const CoffeeQualityApp({super.key});

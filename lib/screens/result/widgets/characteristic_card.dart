@@ -16,7 +16,8 @@ class CharacteristicCard extends StatelessWidget {
         children: [
           for (var i = 0; i < entries.length; i++)
             Padding(
-              padding: EdgeInsets.only(bottom: i == entries.length - 1 ? 0 : 12),
+              padding:
+                  EdgeInsets.only(bottom: i == entries.length - 1 ? 0 : 12),
               child: Row(
                 children: [
                   Container(

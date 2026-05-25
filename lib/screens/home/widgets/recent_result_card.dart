@@ -82,7 +82,7 @@ class RecentResultCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        DateFormatter.format(result.date),
+                        DateFormatter.format(result.detectedAt),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: AppColors.greyText,
                             ),

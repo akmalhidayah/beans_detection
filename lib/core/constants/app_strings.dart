@@ -1,8 +1,9 @@
 class AppStrings {
   const AppStrings._();
 
-  static const String appName = 'Deteksi Kualitas Biji Kopi';
-  static const String appSubtitle = 'Klasifikasi Arabika & Robusta Berbasis AI';
+  static const String appName = 'Coffee Quality Detection';
+  static const String appSubtitle =
+      'Klasifikasi Kualitas Biji Kopi Menggunakan YOLOv11';
   static const String appDescription =
-      'Bantu identifikasi kualitas biji kopi Arabika dan Robusta secara cepat, objektif, dan konsisten.';
+      'Aplikasi ini membantu mengklasifikasikan kualitas biji kopi Arabika dan Robusta berdasarkan citra digital menggunakan metode YOLOv11.';
 }

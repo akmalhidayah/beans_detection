@@ -18,14 +18,19 @@ class CoffeePlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasTitle = title.trim().isNotEmpty;
+    final hasSubtitle = subtitle.trim().isNotEmpty;
+    final isCompact = !hasTitle && !hasSubtitle;
+
     return Container(
       width: double.infinity,
       height: height,
       decoration: BoxDecoration(
         color: AppColors.cream,
         borderRadius: BorderRadius.circular(24),
-        border:
-            Border.all(color: AppColors.secondaryBrown.withValues(alpha: 0.18)),
+        border: Border.all(
+          color: AppColors.secondaryBrown.withValues(alpha: 0.18),
+        ),
       ),
       child: Stack(
         alignment: Alignment.center,
@@ -34,7 +39,7 @@ class CoffeePlaceholder extends StatelessWidget {
             child: CustomPaint(painter: _CoffeePatternPainter()),
           ),
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(isCompact ? 6 : 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -43,23 +48,27 @@ class CoffeePlaceholder extends StatelessWidget {
                   size: iconSize,
                   color: AppColors.primaryBrown,
                 ),
-                const SizedBox(height: 14),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppColors.darkText,
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  subtitle,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.greyText,
-                      ),
-                ),
+                if (hasTitle) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: AppColors.darkText,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ],
+                if (hasSubtitle) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    subtitle,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppColors.greyText,
+                        ),
+                  ),
+                ],
               ],
             ),
           ),

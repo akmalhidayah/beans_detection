@@ -8,7 +8,7 @@ class RoundedCard extends StatelessWidget {
     required this.child,
     this.padding = const EdgeInsets.all(18),
     this.color = AppColors.white,
-    this.borderRadius = 24,
+    this.borderRadius = 8,
     this.onTap,
   });
 
@@ -24,11 +24,12 @@ class RoundedCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(color: AppColors.line),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryBrown.withValues(alpha: 0.07),
-            blurRadius: 22,
-            offset: const Offset(0, 10),
+            color: AppColors.darkText.withValues(alpha: 0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),

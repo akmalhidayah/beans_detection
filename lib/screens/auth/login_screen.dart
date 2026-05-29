@@ -65,13 +65,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   AuthProviderButton(
                     label: 'Masuk dengan Google',
                     google: true,
-                    onPressed: _showFirebaseSetupMessage,
+                    onPressed: _isLoading ? null : _loginWithGoogle,
                   ),
                   const SizedBox(height: 10),
                   AuthProviderButton(
                     label: 'Masuk dengan Nomor Telepon',
                     icon: Icons.phone_android_rounded,
-                    onPressed: _showFirebaseSetupMessage,
+                    onPressed: _isLoading ? null : _loginWithPhone,
                   ),
                   const SizedBox(height: 20),
                   const _DividerLabel(label: 'atau masuk dengan email'),
@@ -151,15 +151,90 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+  Future<void> _loginWithGoogle() async {
+    setState(() => _isLoading = true);
+    try {
+      await _authService.signInWithGoogleAccount();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      _showMessage(error.toString().replaceFirst('Exception: ', ''));
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    _openHome();
+  }
+
+  Future<void> _loginWithPhone() async {
+    final phone = await _showInputDialog(
+      title: 'Masuk Nomor Telepon',
+      label: 'Nomor Telepon',
+      icon: Icons.phone_android_rounded,
+      keyboardType: TextInputType.phone,
+    );
+    if (phone == null) return;
+    if (phone.length < 8) {
+      _showMessage('Nomor telepon belum valid.');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    await _authService.signInWithPhone(phone: phone);
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    _openHome();
+  }
+
+  Future<String?> _showInputDialog({
+    required String title,
+    required String label,
+    required IconData icon,
+    required TextInputType keyboardType,
+  }) async {
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: keyboardType,
+            decoration: InputDecoration(
+              labelText: label,
+              prefixIcon: Icon(icon),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: const Text('Lanjut'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+    if (value == null || value.trim().isEmpty) return null;
+    return value.trim();
+  }
+
+  void _openHome() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const HomeScreen()),
     );
   }
 
-  void _showFirebaseSetupMessage() {
-    _showMessage(
-      'Login Google/telepon perlu Firebase Auth dan database online terlebih dahulu.',
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
     );
   }
 }

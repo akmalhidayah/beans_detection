@@ -13,6 +13,7 @@ class AppTheme {
         primary: AppColors.primaryBrown,
         secondary: AppColors.secondaryBrown,
         surface: AppColors.lightCream,
+        surfaceContainerHighest: AppColors.creamBackground,
       ),
       scaffoldBackgroundColor: AppColors.lightCream,
       fontFamily: null,
@@ -29,27 +30,29 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         color: AppColors.white,
-        elevation: 2,
-        shadowColor: AppColors.primaryBrown.withValues(alpha: 0.14),
+        elevation: 0,
+        shadowColor: Colors.transparent,
         surfaceTintColor: AppColors.white,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: AppColors.line),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.white,
+        fillColor: AppColors.creamBackground,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(20),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.line),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(20),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.line),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(20),
-          borderSide: const BorderSide(color: AppColors.primaryBrown),
+          borderRadius: BorderRadius.circular(14),
+          borderSide:
+              const BorderSide(color: AppColors.primaryBrown, width: 1.4),
         ),
       ),
       snackBarTheme: SnackBarThemeData(

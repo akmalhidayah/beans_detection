@@ -47,13 +47,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   AuthProviderButton(
                     label: 'Daftar dengan Google',
                     google: true,
-                    onPressed: _showFirebaseSetupMessage,
+                    onPressed: _isLoading ? null : _registerWithGoogle,
                   ),
                   const SizedBox(height: 10),
                   AuthProviderButton(
                     label: 'Daftar dengan Nomor Telepon',
                     icon: Icons.phone_android_rounded,
-                    onPressed: _showFirebaseSetupMessage,
+                    onPressed: _isLoading ? null : _registerWithPhone,
                   ),
                   const SizedBox(height: 22),
                   TextField(
@@ -140,15 +140,129 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
+  Future<void> _registerWithGoogle() async {
+    setState(() => _isLoading = true);
+    try {
+      await _authService.signInWithGoogleAccount();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      _showMessage(error.toString().replaceFirst('Exception: ', ''));
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    _showMessage('Akun Google berhasil dibuat.');
+    _openHome();
+  }
+
+  Future<void> _registerWithPhone() async {
+    final profile = await _showProviderDialog(
+      title: 'Daftar Nomor Telepon',
+      primaryLabel: 'Nomor Telepon',
+      primaryIcon: Icons.phone_android_rounded,
+      primaryKeyboardType: TextInputType.phone,
+    );
+    if (profile == null) return;
+    if (profile.primary.length < 8) {
+      _showMessage('Nomor telepon belum valid.');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    await _authService.signInWithPhone(
+      phone: profile.primary,
+      name: profile.name,
+    );
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    _showMessage('Akun telepon berhasil dibuat.');
+    _openHome();
+  }
+
+  Future<_ProviderProfile?> _showProviderDialog({
+    required String title,
+    required String primaryLabel,
+    required IconData primaryIcon,
+    required TextInputType primaryKeyboardType,
+  }) async {
+    final nameController = TextEditingController();
+    final primaryController = TextEditingController();
+    final value = await showDialog<_ProviderProfile>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Nama',
+                  prefixIcon: Icon(Icons.person_rounded),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: primaryController,
+                keyboardType: primaryKeyboardType,
+                decoration: InputDecoration(
+                  labelText: primaryLabel,
+                  prefixIcon: Icon(primaryIcon),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                  _ProviderProfile(
+                    name: nameController.text.trim(),
+                    primary: primaryController.text.trim(),
+                  ),
+                );
+              },
+              child: const Text('Buat'),
+            ),
+          ],
+        );
+      },
+    );
+    nameController.dispose();
+    primaryController.dispose();
+    if (value == null || value.primary.isEmpty) return null;
+    return value;
+  }
+
+  void _openHome() {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const HomeScreen()),
+      (route) => false,
+    );
+  }
+
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
   }
+}
 
-  void _showFirebaseSetupMessage() {
-    _showMessage(
-      'Daftar Google/telepon perlu Firebase Auth dan database online terlebih dahulu.',
-    );
-  }
+class _ProviderProfile {
+  const _ProviderProfile({
+    required this.name,
+    required this.primary,
+  });
+
+  final String name;
+  final String primary;
 }

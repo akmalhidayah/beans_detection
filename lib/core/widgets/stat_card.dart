@@ -21,12 +21,13 @@ class StatCard extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.line),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryBrown.withValues(alpha: 0.06),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            color: AppColors.darkText.withValues(alpha: 0.035),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
         ],
       ),

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../constants/app_assets.dart';
 import '../theme/app_colors.dart';
 
 class AuthProviderButton extends StatelessWidget {
@@ -58,7 +59,12 @@ class _GoogleMark extends StatelessWidget {
     return SizedBox(
       width: 24,
       height: 24,
-      child: CustomPaint(painter: _GoogleMarkPainter()),
+      child: Image.asset(
+        AppAssets.googleLogoPath,
+        errorBuilder: (_, __, ___) => CustomPaint(
+          painter: _GoogleMarkPainter(),
+        ),
+      ),
     );
   }
 }

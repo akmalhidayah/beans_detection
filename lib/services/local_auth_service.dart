@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -42,6 +43,7 @@ class LocalAuthService {
   static const _syncedOnlineKey = 'syncedOnline';
   static const _authTokenKey = 'authToken';
   static bool _googleInitialized = false;
+  static Future<void>? _googleInitializeFuture;
 
   Future<bool> isLoggedIn() async {
     final prefs = await SharedPreferences.getInstance();
@@ -104,7 +106,11 @@ class LocalAuthService {
   Future<void> signInWithGoogleAccount() async {
     await _ensureGoogleInitialized();
     if (!GoogleSignIn.instance.supportsAuthenticate()) {
-      throw Exception('Google Sign-In belum didukung di platform ini.');
+      throw Exception(
+        kIsWeb
+            ? 'Login Google web harus memakai tombol resmi Google. Untuk test APK, jalankan di emulator Android.'
+            : 'Google Sign-In belum didukung di platform ini.',
+      );
     }
 
     final account = await GoogleSignIn.instance.authenticate();
@@ -362,13 +368,22 @@ class LocalAuthService {
 
   Future<void> _ensureGoogleInitialized() async {
     if (_googleInitialized) return;
-    await GoogleSignIn.instance.initialize(
+    _googleInitializeFuture ??= GoogleSignIn.instance
+        .initialize(
       clientId:
           ApiConfig.googleClientId.isEmpty ? null : ApiConfig.googleClientId,
-      serverClientId: ApiConfig.googleServerClientId.isEmpty
+      serverClientId: kIsWeb || ApiConfig.googleServerClientId.isEmpty
           ? null
           : ApiConfig.googleServerClientId,
-    );
+    )
+        .catchError((Object error) {
+      final message = error.toString();
+      if (message.contains('init() has already been called')) {
+        return;
+      }
+      throw error;
+    });
+    await _googleInitializeFuture;
     _googleInitialized = true;
   }
 

@@ -2,25 +2,40 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 
 import '../core/config/api_config.dart';
 import '../models/detection_result.dart';
 
 class PredictionApiService {
-  Future<DetectionResult> predictImage(File imageFile) async {
-    if (!await imageFile.exists()) {
+  Future<DetectionResult> predictImage(XFile imageFile) async {
+    if (!kIsWeb && !await File(imageFile.path).exists()) {
       throw Exception('File gambar tidak ditemukan.');
     }
 
     try {
+      Uint8List? imageBytes;
       final request = http.MultipartRequest(
         'POST',
         Uri.parse('${ApiConfig.baseUrl}/predict'),
       );
-      request.files.add(
-        await http.MultipartFile.fromPath('file', imageFile.path),
-      );
+
+      if (kIsWeb) {
+        imageBytes = await imageFile.readAsBytes();
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'file',
+            imageBytes,
+            filename: imageFile.name,
+          ),
+        );
+      } else {
+        request.files.add(
+          await http.MultipartFile.fromPath('file', imageFile.path),
+        );
+      }
 
       final streamedResponse = await request.send().timeout(
             const Duration(seconds: 60),
@@ -50,7 +65,8 @@ class PredictionApiService {
 
       return DetectionResult.fromApiJson(
         data,
-        localImagePath: imageFile.path,
+        localImagePath: kIsWeb ? null : imageFile.path,
+        localImageBytes: imageBytes,
       );
     } on SocketException {
       throw Exception(

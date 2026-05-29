@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/primary_button.dart';
+import '../../core/widgets/secondary_button.dart';
 import '../../services/local_auth_service.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -76,6 +78,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             prefixIcon: Icon(Icons.location_on_rounded),
                           ),
                         ),
+                        const SizedBox(height: 10),
+                        SecondaryButton(
+                          label: 'Buka Google Maps',
+                          icon: Icons.map_rounded,
+                          onPressed: _openGoogleMaps,
+                        ),
                         const SizedBox(height: 22),
                         PrimaryButton(
                           label: 'Simpan',
@@ -119,5 +127,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
     if (!mounted) return;
     Navigator.pop(context, true);
+  }
+
+  Future<void> _openGoogleMaps() async {
+    final query = _locationController.text.trim().isEmpty
+        ? 'coffee farm near me'
+        : _locationController.text.trim();
+    final url = Uri.parse(
+      'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(query)}',
+    );
+
+    final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Google Maps tidak dapat dibuka.')),
+      );
+    }
   }
 }

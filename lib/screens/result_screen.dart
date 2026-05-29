@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_colors.dart';
@@ -165,12 +166,13 @@ class _BoundingBoxPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final box =
-        result.boundingBoxes.isEmpty ? null : result.boundingBoxes.first;
+    final boxes = result.boundingBoxes;
     final gradeColor = GradeBadge.gradeColor(result.grade);
     final localImagePath = result.imagePath;
+    final imageBytes = result.imageBytes;
+    final hasMemoryImage = imageBytes != null && imageBytes.isNotEmpty;
     final hasLocalImage =
-        localImagePath != null && File(localImagePath).existsSync();
+        !kIsWeb && localImagePath != null && File(localImagePath).existsSync();
 
     return AspectRatio(
       aspectRatio: 1.42,
@@ -183,17 +185,22 @@ class _BoundingBoxPreview extends StatelessWidget {
             return Stack(
               children: [
                 Positioned.fill(
-                  child: hasLocalImage
-                      ? Image.file(
-                          File(localImagePath),
+                  child: hasMemoryImage
+                      ? Image.memory(
+                          imageBytes,
                           fit: BoxFit.cover,
                         )
-                      : const CoffeePlaceholder(
-                          title: 'Preview hasil deteksi',
-                          subtitle: 'Gambar hasil deteksi biji kopi',
-                        ),
+                      : hasLocalImage
+                          ? Image.file(
+                              File(localImagePath),
+                              fit: BoxFit.cover,
+                            )
+                          : const CoffeePlaceholder(
+                              title: 'Preview hasil deteksi',
+                              subtitle: 'Gambar hasil deteksi biji kopi',
+                            ),
                 ),
-                if (box != null) ...[
+                for (final box in boxes) ...[
                   Positioned(
                     left: box.x * width,
                     top: box.y * height,
@@ -207,9 +214,10 @@ class _BoundingBoxPreview extends StatelessWidget {
                     ),
                   ),
                   Positioned(
-                    left: box.x * width,
+                    left: (box.x * width).clamp(8, width - 120).toDouble(),
                     top: (box.y * height - 30).clamp(8, height - 40).toDouble(),
                     child: Container(
+                      constraints: BoxConstraints(maxWidth: width - 16),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
                         vertical: 6,
@@ -219,7 +227,9 @@ class _BoundingBoxPreview extends StatelessWidget {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
-                        '${box.label.isEmpty ? result.className : box.label} ${result.confidenceText}',
+                        '${box.label.isEmpty ? result.className : box.label} ${_formatConfidence(box.confidence)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: AppColors.white,
                               fontWeight: FontWeight.w900,
@@ -234,6 +244,11 @@ class _BoundingBoxPreview extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _formatConfidence(double value) {
+    final percent = value <= 1 ? value * 100 : value;
+    return '${percent.toStringAsFixed(1)}%';
   }
 }
 
@@ -268,6 +283,10 @@ class _ResultSummary extends StatelessWidget {
           _ResultRow(label: 'Jenis kopi', value: result.coffeeType),
           _ResultRow(label: 'Grade kualitas', value: result.grade),
           _ResultRow(label: 'Confidence', value: result.confidenceText),
+          _ResultRow(
+            label: 'Objek terdeteksi',
+            value: result.boundingBoxes.length.toString(),
+          ),
           _ResultRow(
             label: 'Status kualitas',
             value: result.status,

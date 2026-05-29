@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'bounding_box.dart';
 
 class DetectionResult {
@@ -16,6 +19,7 @@ class DetectionResult {
     required this.detectedAt,
     required this.characteristics,
     this.boundingBoxes = const [],
+    this.imageBytes,
   })  : className = className ?? _buildClassName(coffeeType, grade),
         confidencePercent = confidencePercent ?? _normalizePercent(confidence);
 
@@ -33,6 +37,7 @@ class DetectionResult {
   final DateTime detectedAt;
   final Map<String, String> characteristics;
   final List<BoundingBox> boundingBoxes;
+  final Uint8List? imageBytes;
 
   String get confidenceText => '${confidencePercent.toStringAsFixed(1)}%';
 
@@ -44,6 +49,7 @@ class DetectionResult {
   factory DetectionResult.fromApiJson(
     Map<String, dynamic> json, {
     String? localImagePath,
+    Uint8List? localImageBytes,
   }) {
     final characteristicsJson = json['characteristics'];
     final boxesJson = json['bounding_boxes'];
@@ -64,6 +70,7 @@ class DetectionResult {
       detectedAt: DateTime.now(),
       characteristics: _parseCharacteristics(characteristicsJson),
       boundingBoxes: _parseBoundingBoxes(boxesJson, className),
+      imageBytes: localImageBytes,
     );
   }
 
@@ -93,6 +100,7 @@ class DetectionResult {
         boxesJson,
         json['className']?.toString() ?? '',
       ),
+      imageBytes: _parseImageBytes(json['imageBytes']),
     );
   }
 
@@ -112,6 +120,7 @@ class DetectionResult {
       'detectedAt': detectedAt.toIso8601String(),
       'characteristics': characteristics,
       'boundingBoxes': boundingBoxes.map((box) => box.toJson()).toList(),
+      'imageBytes': imageBytes == null ? null : base64Encode(imageBytes!),
     };
   }
 
@@ -157,5 +166,14 @@ class DetectionResult {
           ),
         )
         .toList();
+  }
+
+  static Uint8List? _parseImageBytes(dynamic value) {
+    if (value is! String || value.isEmpty) return null;
+    try {
+      return base64Decode(value);
+    } catch (_) {
+      return null;
+    }
   }
 }

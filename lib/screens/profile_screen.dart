@@ -1,3 +1,5 @@
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_colors.dart';
@@ -12,6 +14,7 @@ import '../core/widgets/stat_card.dart';
 import '../models/detection_result.dart';
 import '../services/local_auth_service.dart';
 import '../services/local_history_service.dart';
+import '../services/model_management_service.dart';
 import '../services/prediction_api_service.dart';
 import 'auth/login_screen.dart';
 import 'detection_screen.dart';
@@ -31,11 +34,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _authService = LocalAuthService();
   final _historyService = LocalHistoryService();
   final _apiService = PredictionApiService();
+  final _modelService = ModelManagementService();
 
   LocalUser? _user;
   List<DetectionResult> _history = const [];
   bool _backendOnline = false;
   bool _isLoading = true;
+  bool _isUploadingModel = false;
 
   String get _language => _user?.language ?? AppLanguage.indonesia;
 
@@ -162,6 +167,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ],
                           ),
                           const SizedBox(height: 24),
+                          const SectionTitle(title: 'Model YOLO'),
+                          const SizedBox(height: 12),
+                          RoundedCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _InfoRow(
+                                  icon: Icons.memory_rounded,
+                                  label: 'Model aktif',
+                                  value: 'models/best.pt',
+                                ),
+                                const SizedBox(height: 14),
+                                SecondaryButton(
+                                  label: _isUploadingModel
+                                      ? 'Mengunggah model...'
+                                      : 'Upload Model .pt',
+                                  icon: Icons.cloud_upload_rounded,
+                                  onPressed:
+                                      _isUploadingModel ? null : _uploadModel,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
                           PrimaryButton(
                             label: AppLanguage.text('edit_profile', _language),
                             icon: Icons.edit_rounded,
@@ -244,6 +273,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
     if (updated == true) {
       _loadData();
+    }
+  }
+
+  Future<void> _uploadModel() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['pt'],
+      withData: kIsWeb,
+    );
+    final file = result?.files.single;
+    if (file == null) return;
+
+    setState(() => _isUploadingModel = true);
+    try {
+      await _modelService.uploadModel(file);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Model berhasil diunggah. Backend memakai best.pt baru.'),
+        ),
+      );
+      _refreshBackendStatus();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingModel = false);
+      }
     }
   }
 

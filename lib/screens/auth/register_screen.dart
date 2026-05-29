@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/auth_provider_button.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../services/local_auth_service.dart';
 import '../home_screen.dart';
@@ -43,6 +44,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  AuthProviderButton(
+                    label: 'Daftar dengan Google',
+                    google: true,
+                    onPressed: _showFirebaseSetupMessage,
+                  ),
+                  const SizedBox(height: 10),
+                  AuthProviderButton(
+                    label: 'Daftar dengan Nomor Telepon',
+                    icon: Icons.phone_android_rounded,
+                    onPressed: _showFirebaseSetupMessage,
+                  ),
+                  const SizedBox(height: 22),
                   TextField(
                     controller: _nameController,
                     decoration: const InputDecoration(
@@ -130,6 +143,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
+    );
+  }
+
+  void _showFirebaseSetupMessage() {
+    _showMessage(
+      'Daftar Google/telepon perlu Firebase Auth dan database online terlebih dahulu.',
     );
   }
 }

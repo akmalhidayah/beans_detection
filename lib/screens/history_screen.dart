@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_colors.dart';
@@ -221,6 +222,12 @@ class _HistoryItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final imageBytes = result.imageBytes;
+    final hasMemoryImage = imageBytes != null && imageBytes.isNotEmpty;
+    final hasLocalImage = !kIsWeb &&
+        result.imagePath != null &&
+        File(result.imagePath!).existsSync();
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
@@ -235,14 +242,16 @@ class _HistoryItemCard extends StatelessWidget {
                 child: SizedBox(
                   width: 58,
                   height: 58,
-                  child: result.imagePath != null &&
-                          File(result.imagePath!).existsSync()
-                      ? Image.file(File(result.imagePath!), fit: BoxFit.cover)
-                      : const CoffeePlaceholder(
-                          iconSize: 24,
-                          title: '',
-                          subtitle: '',
-                        ),
+                  child: hasMemoryImage
+                      ? Image.memory(imageBytes, fit: BoxFit.cover)
+                      : hasLocalImage
+                          ? Image.file(File(result.imagePath!),
+                              fit: BoxFit.cover)
+                          : const CoffeePlaceholder(
+                              iconSize: 24,
+                              title: '',
+                              subtitle: '',
+                            ),
                 ),
               ),
               const SizedBox(width: 12),

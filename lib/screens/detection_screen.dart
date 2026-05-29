@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -38,7 +39,7 @@ class _DetectionScreenState extends State<DetectionScreen> {
   final ImagePicker _imagePicker = ImagePicker();
   final PredictionApiService _apiService = PredictionApiService();
 
-  File? _selectedImage;
+  XFile? _selectedImage;
   bool _isLoading = false;
   String _language = AppLanguage.indonesia;
 
@@ -132,7 +133,7 @@ class _DetectionScreenState extends State<DetectionScreen> {
       if (pickedImage == null) return;
 
       setState(() {
-        _selectedImage = File(pickedImage.path);
+        _selectedImage = pickedImage;
       });
     } catch (_) {
       _showMessage(
@@ -142,8 +143,8 @@ class _DetectionScreenState extends State<DetectionScreen> {
   }
 
   Future<void> _analyze() async {
-    final imageFile = _selectedImage;
-    if (imageFile == null) {
+    final selectedImage = _selectedImage;
+    if (selectedImage == null) {
       _showMessage('Pilih atau ambil gambar terlebih dahulu.');
       return;
     }
@@ -158,7 +159,7 @@ class _DetectionScreenState extends State<DetectionScreen> {
       if (!backendOnline) {
         throw Exception('Backend offline. Pastikan server sedang berjalan.');
       }
-      result = await _apiService.predictImage(imageFile);
+      result = await _apiService.predictImage(selectedImage);
     } catch (exception) {
       if (mounted) {
         _showMessage(_friendlyError(exception));
@@ -247,7 +248,7 @@ class _ImagePreview extends StatelessWidget {
     required this.placeholderTitle,
   });
 
-  final File? imageFile;
+  final XFile? imageFile;
   final String placeholderTitle;
 
   @override
@@ -266,12 +267,43 @@ class _ImagePreview extends StatelessWidget {
       borderRadius: BorderRadius.circular(24),
       child: AspectRatio(
         aspectRatio: 1.42,
-        child: Image.file(
-          image,
-          fit: BoxFit.cover,
-          width: double.infinity,
-        ),
+        child: _SelectedImageView(image: image),
       ),
+    );
+  }
+}
+
+class _SelectedImageView extends StatelessWidget {
+  const _SelectedImageView({required this.image});
+
+  final XFile image;
+
+  @override
+  Widget build(BuildContext context) {
+    if (kIsWeb) {
+      return FutureBuilder<Uint8List>(
+        future: image.readAsBytes(),
+        builder: (context, snapshot) {
+          final bytes = snapshot.data;
+          if (bytes == null) {
+            return const Center(
+              child: CircularProgressIndicator(color: AppColors.primaryBrown),
+            );
+          }
+
+          return Image.memory(
+            bytes,
+            fit: BoxFit.cover,
+            width: double.infinity,
+          );
+        },
+      );
+    }
+
+    return Image.file(
+      File(image.path),
+      fit: BoxFit.cover,
+      width: double.infinity,
     );
   }
 }

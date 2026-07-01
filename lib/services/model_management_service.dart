@@ -10,8 +10,13 @@ import 'local_auth_service.dart';
 
 class ModelManagementService {
   Future<void> uploadModel(PlatformFile file) async {
-    final currentUser = await LocalAuthService().getUser();
-    if (!currentUser.isAdmin || currentUser.authToken.isEmpty) {
+    final authService = LocalAuthService();
+    final currentUser = await authService.getUser();
+    final token = await authService.getToken();
+    if (token.isEmpty) {
+      throw Exception('Sesi login tidak ditemukan. Silakan login ulang.');
+    }
+    if (!currentUser.isAdmin) {
       throw Exception('Akses ditolak. Hanya admin yang dapat mengunggah model.');
     }
 
@@ -25,7 +30,7 @@ class ModelManagementService {
         'POST',
         Uri.parse('${ApiConfig.baseUrl}${ApiConfig.modelUploadEndpoint}'),
       );
-      request.headers['Authorization'] = 'Bearer ${currentUser.authToken}';
+      request.headers['Authorization'] = 'Bearer $token';
 
       if (kIsWeb) {
         final bytes = file.bytes;

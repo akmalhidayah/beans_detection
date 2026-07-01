@@ -285,6 +285,8 @@ class LocalAuthService {
     return prefs.getString(_authTokenKey) ?? '';
   }
 
+  Future<String> getToken() => getAuthToken();
+
   Future<void> updateProfile({
     required String name,
     required String email,

@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../core/config/api_config.dart';
@@ -14,39 +15,72 @@ class PredictionApiService {
     XFile imageFile, {
     String authToken = '',
   }) async {
-    if (!kIsWeb && !await File(imageFile.path).exists()) {
-      throw Exception('File gambar tidak ditemukan.');
-    }
-
     try {
       Uint8List? imageBytes;
+      final endpoint = '${ApiConfig.baseUrl}${ApiConfig.predictEndpoint}';
+      final mediaType = _imageMediaType(imageFile);
+
+      if (mediaType == null) {
+        throw Exception(
+          'Format gambar tidak didukung. Gunakan JPG, JPEG, atau PNG.',
+        );
+      }
+
+      if (kIsWeb) {
+        imageBytes = await imageFile.readAsBytes();
+        _validateImageBytes(imageBytes);
+      } else {
+        final path = imageFile.path;
+        if (path.isEmpty) {
+          throw Exception('File gambar tidak ditemukan.');
+        }
+        final image = File(path);
+        if (!await image.exists()) {
+          throw Exception('File gambar tidak ditemukan.');
+        }
+        final size = await image.length();
+        _validateImageSize(size);
+      }
+
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('${ApiConfig.baseUrl}${ApiConfig.predictEndpoint}'),
+        Uri.parse(endpoint),
       );
       if (authToken.isNotEmpty) {
         request.headers['Authorization'] = 'Bearer $authToken';
       }
 
       if (kIsWeb) {
-        imageBytes = await imageFile.readAsBytes();
         request.files.add(
           http.MultipartFile.fromBytes(
             'file',
-            imageBytes,
+            imageBytes!,
             filename: imageFile.name,
+            contentType: mediaType,
           ),
         );
       } else {
         request.files.add(
-          await http.MultipartFile.fromPath('file', imageFile.path),
+          await http.MultipartFile.fromPath(
+            'file',
+            imageFile.path,
+            contentType: mediaType,
+          ),
         );
       }
+
+      _debugUploadInfo(
+        endpoint: endpoint,
+        imageFile: imageFile,
+        mediaType: mediaType,
+        sizeBytes: kIsWeb ? imageBytes!.length : await File(imageFile.path).length(),
+      );
 
       final streamedResponse = await request.send().timeout(
             const Duration(seconds: 60),
           );
       final response = await http.Response.fromStream(streamedResponse);
+      _debugResponse(response);
       final jsonBody = _decodeMap(response.body);
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -159,5 +193,56 @@ class PredictionApiService {
       return null;
     }
     return null;
+  }
+
+  MediaType? _imageMediaType(XFile imageFile) {
+    final source = '${imageFile.path} ${imageFile.name}'.toLowerCase();
+    if (source.contains('.jpg') || source.contains('.jpeg')) {
+      return MediaType('image', 'jpeg');
+    }
+    if (source.contains('.png')) {
+      return MediaType('image', 'png');
+    }
+    if (source.contains('.webp') || source.contains('.heic')) {
+      return null;
+    }
+    return null;
+  }
+
+  void _validateImageBytes(Uint8List bytes) {
+    if (bytes.isEmpty) {
+      throw Exception('File gambar tidak ditemukan.');
+    }
+    _validateImageSize(bytes.length);
+  }
+
+  void _validateImageSize(int sizeBytes) {
+    if (sizeBytes <= 0) {
+      throw Exception('File gambar tidak ditemukan.');
+    }
+    const maxBytes = 5 * 1024 * 1024;
+    if (sizeBytes > maxBytes) {
+      throw Exception('Ukuran gambar terlalu besar. Gunakan gambar maksimal 5 MB.');
+    }
+  }
+
+  void _debugUploadInfo({
+    required String endpoint,
+    required XFile imageFile,
+    required MediaType mediaType,
+    required int sizeBytes,
+  }) {
+    if (!kDebugMode) return;
+    debugPrint('Predict upload endpoint: $endpoint');
+    debugPrint('Predict upload path: ${imageFile.path}');
+    debugPrint('Predict upload name: ${imageFile.name}');
+    debugPrint('Predict upload MIME: $mediaType');
+    debugPrint('Predict upload size: $sizeBytes bytes');
+  }
+
+  void _debugResponse(http.Response response) {
+    if (!kDebugMode) return;
+    debugPrint('Predict response status: ${response.statusCode}');
+    debugPrint('Predict response body: ${response.body}');
   }
 }

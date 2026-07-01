@@ -10,7 +10,10 @@ import '../core/config/api_config.dart';
 import '../models/detection_result.dart';
 
 class PredictionApiService {
-  Future<DetectionResult> predictImage(XFile imageFile) async {
+  Future<DetectionResult> predictImage(
+    XFile imageFile, {
+    String authToken = '',
+  }) async {
     if (!kIsWeb && !await File(imageFile.path).exists()) {
       throw Exception('File gambar tidak ditemukan.');
     }
@@ -19,8 +22,11 @@ class PredictionApiService {
       Uint8List? imageBytes;
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('${ApiConfig.baseUrl}/predict'),
+        Uri.parse('${ApiConfig.baseUrl}${ApiConfig.predictEndpoint}'),
       );
+      if (authToken.isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer $authToken';
+      }
 
       if (kIsWeb) {
         imageBytes = await imageFile.readAsBytes();
@@ -41,44 +47,65 @@ class PredictionApiService {
             const Duration(seconds: 60),
           );
       final response = await http.Response.fromStream(streamedResponse);
+      final jsonBody = _decodeMap(response.body);
 
-      if (response.statusCode != 200) {
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final apiStatus = jsonBody['status']?.toString();
+        if (apiStatus == 'error') {
+          return DetectionResult.fromApiJson(
+            jsonBody,
+            localImagePath: kIsWeb ? null : imageFile.path,
+            localImageBytes: imageBytes,
+          );
+        }
         final message = _messageFromBody(response.body);
         throw Exception(message ?? 'API gagal memproses gambar.');
       }
 
-      final jsonBody = jsonDecode(response.body);
-      if (jsonBody is! Map<String, dynamic>) {
-        throw const FormatException('Format response backend tidak sesuai.');
+      final apiStatus = _statusFromResponse(jsonBody);
+      if (apiStatus == 'error') {
+        return DetectionResult.fromApiJson(
+          jsonBody,
+          localImagePath: kIsWeb ? null : imageFile.path,
+          localImageBytes: imageBytes,
+        );
       }
 
-      if (jsonBody['success'] != true) {
-        throw Exception(
-          jsonBody['message']?.toString() ?? 'API gagal memproses gambar.',
+      if (apiStatus == 'detected' || apiStatus == 'not_detected') {
+        return DetectionResult.fromApiJson(
+          jsonBody,
+          localImagePath: kIsWeb ? null : imageFile.path,
+          localImageBytes: imageBytes,
         );
       }
 
       final data = jsonBody['data'];
-      if (data is! Map<String, dynamic>) {
-        throw const FormatException('Format response backend tidak sesuai.');
+      if (data is Map) {
+        return DetectionResult.fromApiJson(
+          {
+            'status': 'detected',
+            'data': Map<String, dynamic>.from(data),
+          },
+          localImagePath: kIsWeb ? null : imageFile.path,
+          localImageBytes: imageBytes,
+        );
       }
 
-      return DetectionResult.fromApiJson(
-        data,
-        localImagePath: kIsWeb ? null : imageFile.path,
-        localImageBytes: imageBytes,
-      );
+      throw const FormatException('Format response backend tidak sesuai.');
     } on SocketException {
       throw Exception(
-        'Tidak dapat terhubung ke backend. Pastikan server FastAPI sedang berjalan.',
+        'Tidak dapat terhubung ke server. Pastikan backend aktif dan koneksi internet tersedia.',
       );
     } on TimeoutException {
       throw Exception(
-          'Koneksi ke backend timeout. Coba ulangi beberapa saat lagi.');
+        'Tidak dapat terhubung ke server. Pastikan backend aktif dan koneksi internet tersedia.',
+      );
     } on FormatException catch (error) {
       throw Exception(error.message);
     } on http.ClientException {
-      throw Exception('Tidak dapat terhubung ke server backend.');
+      throw Exception(
+        'Tidak dapat terhubung ke server. Pastikan backend aktif dan koneksi internet tersedia.',
+      );
     }
   }
 
@@ -91,6 +118,34 @@ class PredictionApiService {
     } catch (_) {
       return false;
     }
+  }
+
+  Map<String, dynamic> _decodeMap(String body) {
+    final jsonBody = jsonDecode(body);
+    if (jsonBody is! Map<String, dynamic>) {
+      throw const FormatException('Format response backend tidak sesuai.');
+    }
+    return jsonBody;
+  }
+
+  String _statusFromResponse(Map<String, dynamic> body) {
+    final rootStatus = body['status']?.toString();
+    if (_isApiStatus(rootStatus)) return rootStatus!;
+
+    final data = body['data'];
+    if (data is Map) {
+      final dataStatus = data['detection_status']?.toString();
+      if (_isApiStatus(dataStatus)) return dataStatus!;
+      final nestedStatus = data['status']?.toString();
+      if (_isApiStatus(nestedStatus)) return nestedStatus!;
+    }
+
+    if (body['success'] == true) return 'detected';
+    return '';
+  }
+
+  bool _isApiStatus(String? value) {
+    return value == 'detected' || value == 'not_detected' || value == 'error';
   }
 
   String? _messageFromBody(String body) {

@@ -16,6 +16,7 @@ import '../services/local_auth_service.dart';
 import '../services/local_history_service.dart';
 import '../services/model_management_service.dart';
 import '../services/prediction_api_service.dart';
+import 'admin_users_screen.dart';
 import 'auth/login_screen.dart';
 import 'detection_screen.dart';
 import 'history_screen.dart';
@@ -139,6 +140,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   value:
                                       user?.language ?? AppLanguage.indonesia,
                                 ),
+                                const SizedBox(height: 14),
+                                _InfoRow(
+                                  icon: Icons.admin_panel_settings_rounded,
+                                  label: 'Role',
+                                  value: user?.role ?? 'user',
+                                ),
                               ],
                             ),
                           ),
@@ -166,30 +173,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 24),
-                          const SectionTitle(title: 'Model YOLO'),
-                          const SizedBox(height: 12),
-                          RoundedCard(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _InfoRow(
-                                  icon: Icons.memory_rounded,
-                                  label: 'Model aktif',
-                                  value: 'models/best.pt',
-                                ),
-                                const SizedBox(height: 14),
-                                SecondaryButton(
-                                  label: _isUploadingModel
-                                      ? 'Mengunggah model...'
-                                      : 'Upload Model .pt',
-                                  icon: Icons.cloud_upload_rounded,
-                                  onPressed:
-                                      _isUploadingModel ? null : _uploadModel,
-                                ),
-                              ],
+                          if (user?.isAdmin == true) ...[
+                            const SizedBox(height: 24),
+                            const SectionTitle(title: 'Menu Admin'),
+                            const SizedBox(height: 12),
+                            RoundedCard(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _InfoRow(
+                                    icon: Icons.memory_rounded,
+                                    label: 'Model aktif',
+                                    value: 'models/best.pt',
+                                  ),
+                                  const SizedBox(height: 14),
+                                  SecondaryButton(
+                                    label: _isUploadingModel
+                                        ? 'Mengunggah model...'
+                                        : 'Upload Model .pt',
+                                    icon: Icons.cloud_upload_rounded,
+                                    onPressed:
+                                        _isUploadingModel ? null : _uploadModel,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  SecondaryButton(
+                                    label: 'User Aktif',
+                                    icon: Icons.people_alt_rounded,
+                                    onPressed: _openAdminUsers,
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
+                          ],
                           const SizedBox(height: 24),
                           PrimaryButton(
                             label: AppLanguage.text('edit_profile', _language),
@@ -277,6 +292,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _uploadModel() async {
+    final user = _user;
+    if (user?.isAdmin != true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Akses ditolak. Hanya admin yang dapat mengunggah model.'),
+        ),
+      );
+      return;
+    }
+
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['pt'],
@@ -290,10 +315,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await _modelService.uploadModel(file);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content:
-              Text('Model berhasil diunggah. Backend memakai best.pt baru.'),
-        ),
+        const SnackBar(content: Text('Model berhasil diperbarui.')),
       );
       _refreshBackendStatus();
     } catch (error) {
@@ -308,6 +330,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         setState(() => _isUploadingModel = false);
       }
     }
+  }
+
+  Future<void> _openAdminUsers() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AdminUsersScreen()),
+    );
   }
 
   Future<void> _logout() async {

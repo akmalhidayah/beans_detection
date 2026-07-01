@@ -24,6 +24,7 @@ class LocalHistoryService {
   }
 
   Future<void> saveResult(DetectionResult result) async {
+    if (!result.isDetected) return;
     final prefs = await SharedPreferences.getInstance();
     final history = prefs.getStringList(_historyKey) ?? <String>[];
     history.insert(0, jsonEncode(result.toJson()));

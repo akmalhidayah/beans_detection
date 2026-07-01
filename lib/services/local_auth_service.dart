@@ -11,6 +11,7 @@ import '../core/utils/app_language.dart';
 
 class LocalUser {
   const LocalUser({
+    this.id = '',
     required this.name,
     required this.email,
     required this.location,
@@ -19,8 +20,13 @@ class LocalUser {
     this.authProvider = 'email',
     this.syncedOnline = false,
     this.authToken = '',
+    this.role = 'user',
+    this.isActive = true,
+    this.lastLoginAt,
+    this.lastSeenAt,
   });
 
+  final String id;
   final String name;
   final String email;
   final String location;
@@ -29,10 +35,18 @@ class LocalUser {
   final String authProvider;
   final bool syncedOnline;
   final String authToken;
+  final String role;
+  final bool isActive;
+  final DateTime? lastLoginAt;
+  final DateTime? lastSeenAt;
+
+  bool get isAdmin => role.toLowerCase() == 'admin';
+  bool get isUser => role.toLowerCase() == 'user';
 }
 
 class LocalAuthService {
   static const _isLoggedInKey = 'isLoggedIn';
+  static const _idKey = 'id';
   static const _nameKey = 'name';
   static const _emailKey = 'email';
   static const _passwordKey = 'password';
@@ -42,6 +56,10 @@ class LocalAuthService {
   static const _authProviderKey = 'authProvider';
   static const _syncedOnlineKey = 'syncedOnline';
   static const _authTokenKey = 'authToken';
+  static const _roleKey = 'role';
+  static const _isActiveKey = 'isActive';
+  static const _lastLoginAtKey = 'lastLoginAt';
+  static const _lastSeenAtKey = 'lastSeenAt';
   static bool _googleInitialized = false;
   static Future<void>? _googleInitializeFuture;
 
@@ -61,20 +79,25 @@ class LocalAuthService {
     required String password,
     String location = 'Desa Masewe, Mamasa',
   }) async {
-    final synced = await _registerRemote(
+    final session = await _registerRemote(
       name: name,
       email: email,
       password: password,
       location: location,
       authProvider: 'email',
     );
+    final user = session?.user ??
+        LocalUser(
+          name: name,
+          email: email.trim().toLowerCase(),
+          location: location,
+          language: AppLanguage.indonesia,
+          role: 'user',
+        );
     await _saveSession(
-      name: name,
-      email: email,
-      password: password,
-      location: location,
-      authProvider: 'email',
-      syncedOnline: synced,
+      user: user,
+      syncedOnline: session != null,
+      authToken: session?.token ?? '',
     );
   }
 
@@ -86,20 +109,25 @@ class LocalAuthService {
     final displayName = (name == null || name.trim().isEmpty)
         ? normalizedEmail.split('@').first
         : name.trim();
-    final synced = await _registerRemote(
+    final session = await _registerRemote(
       name: displayName,
       email: normalizedEmail,
       password: '',
       location: 'Desa Masewe, Mamasa',
       authProvider: 'google',
     );
+    final user = session?.user ??
+        LocalUser(
+          name: displayName,
+          email: normalizedEmail,
+          location: 'Desa Masewe, Mamasa',
+          language: AppLanguage.indonesia,
+          authProvider: 'google',
+        );
     await _saveSession(
-      name: displayName,
-      email: normalizedEmail,
-      password: '',
-      location: 'Desa Masewe, Mamasa',
-      authProvider: 'google',
-      syncedOnline: synced,
+      user: user,
+      syncedOnline: session != null,
+      authToken: session?.token ?? '',
     );
   }
 
@@ -131,12 +159,7 @@ class LocalAuthService {
 
     final session = _sessionFromResponse(response.body);
     await _saveSession(
-      name: session.user.name,
-      email: session.user.email,
-      password: '',
-      location: session.user.location,
-      phone: session.user.phone,
-      authProvider: session.user.authProvider,
+      user: session.user,
       syncedOnline: true,
       authToken: session.token,
     );
@@ -152,7 +175,7 @@ class LocalAuthService {
         ? 'Pengguna ${normalizedPhone.substring(start)}'
         : name.trim();
     final emailAlias = '$normalizedPhone@phone.local';
-    final synced = await _registerRemote(
+    final session = await _registerRemote(
       name: displayName,
       email: emailAlias,
       password: '',
@@ -160,36 +183,47 @@ class LocalAuthService {
       phone: normalizedPhone,
       authProvider: 'phone',
     );
+    final user = session?.user ??
+        LocalUser(
+          name: displayName,
+          email: emailAlias,
+          location: 'Desa Masewe, Mamasa',
+          language: AppLanguage.indonesia,
+          phone: normalizedPhone,
+          authProvider: 'phone',
+        );
     await _saveSession(
-      name: displayName,
-      email: emailAlias,
-      password: '',
-      location: 'Desa Masewe, Mamasa',
-      phone: normalizedPhone,
-      authProvider: 'phone',
-      syncedOnline: synced,
+      user: user,
+      syncedOnline: session != null,
+      authToken: session?.token ?? '',
     );
   }
 
   Future<void> _saveSession({
-    required String name,
-    required String email,
-    required String password,
-    required String location,
-    required String authProvider,
+    required LocalUser user,
     required bool syncedOnline,
-    String phone = '',
-    String authToken = '',
+    required String authToken,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_nameKey, name);
-    await prefs.setString(_emailKey, email);
-    await prefs.setString(_passwordKey, password);
-    await prefs.setString(_locationKey, location);
-    await prefs.setString(_languageKey, AppLanguage.indonesia);
-    await prefs.setString(_phoneKey, phone);
-    await prefs.setString(_authProviderKey, authProvider);
+    await prefs.setString(_idKey, user.id);
+    await prefs.setString(_nameKey, user.name);
+    await prefs.setString(_emailKey, user.email);
+    await prefs.remove(_passwordKey);
+    await prefs.setString(_locationKey, user.location);
+    await prefs.setString(_languageKey, user.language);
+    await prefs.setString(_phoneKey, user.phone);
+    await prefs.setString(_authProviderKey, user.authProvider);
     await prefs.setString(_authTokenKey, authToken);
+    await prefs.setString(_roleKey, user.role.isEmpty ? 'user' : user.role);
+    await prefs.setBool(_isActiveKey, user.isActive);
+    await prefs.setString(
+      _lastLoginAtKey,
+      user.lastLoginAt?.toIso8601String() ?? '',
+    );
+    await prefs.setString(
+      _lastSeenAtKey,
+      user.lastSeenAt?.toIso8601String() ?? '',
+    );
     await prefs.setBool(_syncedOnlineKey, syncedOnline);
     await prefs.setBool(_isLoggedInKey, true);
   }
@@ -201,12 +235,7 @@ class LocalAuthService {
     final remoteUser = await _loginRemote(email: email, password: password);
     if (remoteUser != null) {
       await _saveSession(
-        name: remoteUser.name,
-        email: remoteUser.email,
-        password: password,
-        location: remoteUser.location,
-        phone: remoteUser.phone,
-        authProvider: remoteUser.authProvider,
+        user: remoteUser,
         syncedOnline: true,
         authToken: remoteUser.authToken,
       );
@@ -215,8 +244,12 @@ class LocalAuthService {
 
     final prefs = await SharedPreferences.getInstance();
     final savedEmail = prefs.getString(_emailKey);
-    final savedPassword = prefs.getString(_passwordKey);
-    if (savedEmail == email && savedPassword == password) {
+    final legacyPassword = prefs.getString(_passwordKey);
+    if (legacyPassword != null &&
+        legacyPassword.isNotEmpty &&
+        savedEmail == email &&
+        legacyPassword == password) {
+      await prefs.remove(_passwordKey);
       await prefs.setBool(_isLoggedInKey, true);
       return true;
     }
@@ -231,6 +264,7 @@ class LocalAuthService {
   Future<LocalUser> getUser() async {
     final prefs = await SharedPreferences.getInstance();
     return LocalUser(
+      id: prefs.getString(_idKey) ?? '',
       name: prefs.getString(_nameKey) ?? 'Petani Kopi',
       email: prefs.getString(_emailKey) ?? 'user@example.com',
       location: prefs.getString(_locationKey) ?? 'Desa Masewe, Mamasa',
@@ -239,7 +273,16 @@ class LocalAuthService {
       authProvider: prefs.getString(_authProviderKey) ?? 'email',
       syncedOnline: prefs.getBool(_syncedOnlineKey) ?? false,
       authToken: prefs.getString(_authTokenKey) ?? '',
+      role: prefs.getString(_roleKey) ?? 'user',
+      isActive: prefs.getBool(_isActiveKey) ?? true,
+      lastLoginAt: _parseDate(prefs.getString(_lastLoginAtKey)),
+      lastSeenAt: _parseDate(prefs.getString(_lastSeenAtKey)),
     );
+  }
+
+  Future<String> getAuthToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_authTokenKey) ?? '';
   }
 
   Future<void> updateProfile({
@@ -248,6 +291,7 @@ class LocalAuthService {
     required String location,
   }) async {
     final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString(_authTokenKey) ?? '';
     await prefs.setString(_nameKey, name);
     await prefs.setString(_emailKey, email);
     await prefs.setString(_locationKey, location);
@@ -257,6 +301,7 @@ class LocalAuthService {
       location: location,
       phone: prefs.getString(_phoneKey) ?? '',
       authProvider: prefs.getString(_authProviderKey) ?? 'email',
+      token: token,
     );
     await prefs.setBool(_syncedOnlineKey, synced);
   }
@@ -271,7 +316,7 @@ class LocalAuthService {
     await prefs.setString(_languageKey, language);
   }
 
-  Future<bool> _registerRemote({
+  Future<_AuthSession?> _registerRemote({
     required String name,
     required String email,
     required String password,
@@ -287,9 +332,16 @@ class LocalAuthService {
       'phone': phone,
       'auth_provider': authProvider,
     });
-    return response != null &&
-        response.statusCode >= 200 &&
-        response.statusCode < 300;
+    if (response == null ||
+        response.statusCode < 200 ||
+        response.statusCode >= 300) {
+      return null;
+    }
+    try {
+      return _sessionFromResponse(response.body);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<LocalUser?> _loginRemote({
@@ -307,19 +359,21 @@ class LocalAuthService {
     }
 
     try {
-      final body = jsonDecode(response.body);
-      final data = body is Map<String, dynamic> && body['data'] is Map
-          ? Map<String, dynamic>.from(body['data'] as Map)
-          : body as Map<String, dynamic>;
+      final session = _sessionFromResponse(response.body);
       return LocalUser(
-        name: data['name']?.toString() ?? email.split('@').first,
-        email: data['email']?.toString() ?? email,
-        location: data['location']?.toString() ?? 'Desa Masewe, Mamasa',
-        language: data['language']?.toString() ?? AppLanguage.indonesia,
-        phone: data['phone']?.toString() ?? '',
-        authProvider: data['auth_provider']?.toString() ?? 'email',
+        id: session.user.id,
+        name: session.user.name,
+        email: session.user.email,
+        location: session.user.location,
+        language: session.user.language,
+        phone: session.user.phone,
+        authProvider: session.user.authProvider,
         syncedOnline: true,
-        authToken: body['access_token']?.toString() ?? '',
+        authToken: session.token,
+        role: session.user.role,
+        isActive: session.user.isActive,
+        lastLoginAt: session.user.lastLoginAt,
+        lastSeenAt: session.user.lastSeenAt,
       );
     } catch (_) {
       return null;
@@ -332,14 +386,19 @@ class LocalAuthService {
     required String location,
     required String phone,
     required String authProvider,
+    required String token,
   }) async {
-    final response = await _postJson('/users/profile', {
-      'name': name,
-      'email': email,
-      'location': location,
-      'phone': phone,
-      'auth_provider': authProvider,
-    });
+    final response = await _postJson(
+      '/users/profile',
+      {
+        'name': name,
+        'email': email,
+        'location': location,
+        'phone': phone,
+        'auth_provider': authProvider,
+      },
+      token: token,
+    );
     return response != null &&
         response.statusCode >= 200 &&
         response.statusCode < 300;
@@ -347,13 +406,18 @@ class LocalAuthService {
 
   Future<http.Response?> _postJson(
     String path,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    String token = '',
+  }) async {
+    final headers = {'Content-Type': 'application/json'};
+    if (token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
     try {
       return await http
           .post(
             Uri.parse('${ApiConfig.baseUrl}$path'),
-            headers: const {'Content-Type': 'application/json'},
+            headers: headers,
             body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 6));
@@ -392,23 +456,69 @@ class LocalAuthService {
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('Format response backend tidak sesuai.');
     }
-    final data = decoded['data'];
-    if (data is! Map) {
-      throw const FormatException('Data user backend tidak sesuai.');
-    }
-    final userData = Map<String, dynamic>.from(data);
+    final token = _extractToken(decoded);
+    final userData = _extractUserData(decoded);
     return _AuthSession(
-      token: decoded['access_token']?.toString() ?? '',
-      user: LocalUser(
-        name: userData['name']?.toString() ?? 'Petani Kopi',
-        email: userData['email']?.toString() ?? 'user@example.com',
-        location: userData['location']?.toString() ?? 'Desa Masewe, Mamasa',
-        language: userData['language']?.toString() ?? AppLanguage.indonesia,
-        phone: userData['phone']?.toString() ?? '',
-        authProvider: userData['auth_provider']?.toString() ?? 'google',
-        syncedOnline: true,
-        authToken: decoded['access_token']?.toString() ?? '',
-      ),
+      token: token,
+      user: _userFromMap(userData, token),
+    );
+  }
+
+  String _extractToken(Map<String, dynamic> body) {
+    final rootToken = body['access_token']?.toString() ??
+        body['token']?.toString();
+    if (rootToken != null && rootToken.isNotEmpty) return rootToken;
+
+    final data = body['data'];
+    if (data is Map) {
+      final dataMap = Map<String, dynamic>.from(data);
+      return dataMap['access_token']?.toString() ??
+          dataMap['token']?.toString() ??
+          '';
+    }
+    return '';
+  }
+
+  Map<String, dynamic> _extractUserData(Map<String, dynamic> body) {
+    final data = body['data'];
+    if (data is Map) {
+      final dataMap = Map<String, dynamic>.from(data);
+      final nestedUser = dataMap['user'];
+      if (nestedUser is Map) {
+        return {
+          ...dataMap,
+          ...Map<String, dynamic>.from(nestedUser),
+        };
+      }
+      return dataMap;
+    }
+    final user = body['user'];
+    if (user is Map) {
+      return {
+        ...body,
+        ...Map<String, dynamic>.from(user),
+      };
+    }
+    return body;
+  }
+
+  LocalUser _userFromMap(Map<String, dynamic> data, String token) {
+    return LocalUser(
+      id: data['id']?.toString() ?? '',
+      name: data['name']?.toString() ?? 'Petani Kopi',
+      email: data['email']?.toString() ?? 'user@example.com',
+      location: data['location']?.toString() ?? 'Desa Masewe, Mamasa',
+      language: data['language']?.toString() ?? AppLanguage.indonesia,
+      phone: data['phone']?.toString() ?? '',
+      authProvider: data['auth_provider']?.toString() ??
+          data['authProvider']?.toString() ??
+          'email',
+      syncedOnline: true,
+      authToken: token,
+      role: data['role']?.toString().toLowerCase() ?? 'user',
+      isActive: _toBool(data['is_active'] ?? data['isActive'], fallback: true),
+      lastLoginAt: _parseDate(data['last_login_at'] ?? data['lastLoginAt']),
+      lastSeenAt: _parseDate(data['last_seen_at'] ?? data['lastSeenAt']),
     );
   }
 
@@ -422,6 +532,21 @@ class LocalAuthService {
       return null;
     }
     return null;
+  }
+
+  static bool _toBool(dynamic value, {required bool fallback}) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    final text = value?.toString().toLowerCase();
+    if (text == 'true') return true;
+    if (text == 'false') return false;
+    return fallback;
+  }
+
+  static DateTime? _parseDate(dynamic value) {
+    final text = value?.toString();
+    if (text == null || text.isEmpty) return null;
+    return DateTime.tryParse(text);
   }
 }
 

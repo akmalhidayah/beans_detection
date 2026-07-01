@@ -129,17 +129,10 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     setState(() => _isLoading = true);
-    final hasAccount = await _authService.hasAccount();
-    final success = hasAccount
-        ? await _authService.login(email: email, password: password)
-        : false;
+    final success = await _authService.login(email: email, password: password);
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (!hasAccount) {
-      _showMessage('Akun belum ditemukan. Silakan buat akun terlebih dahulu.');
-      return;
-    }
     if (!success) {
       _showMessage('Email atau password tidak sesuai.');
       return;

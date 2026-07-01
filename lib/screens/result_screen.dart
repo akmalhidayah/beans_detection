@@ -8,6 +8,7 @@ import '../core/utils/app_language.dart';
 import '../core/utils/date_formatter.dart';
 import '../core/widgets/coffee_placeholder.dart';
 import '../core/widgets/confidence_bar.dart';
+import '../core/widgets/empty_state.dart';
 import '../core/widgets/grade_badge.dart';
 import '../core/widgets/info_card.dart';
 import '../core/widgets/primary_button.dart';
@@ -56,85 +57,118 @@ class _ResultScreenState extends State<ResultScreen> {
             constraints: const BoxConstraints(maxWidth: 430),
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _BoundingBoxPreview(result: currentResult),
-                  const SizedBox(height: 22),
-                  if (!isDetected) ...[
-                    const _NotDetectedWarning(),
-                    const SizedBox(height: 18),
-                  ],
-                  _ResultSummary(result: currentResult),
-                  const SizedBox(height: 22),
-                  ConfidenceBar(
-                    value: currentResult.confidencePercent,
-                    color: gradeColor,
-                  ),
-                  const SizedBox(height: 22),
-                  const SectionTitle(title: 'Karakteristik Fisik'),
-                  const SizedBox(height: 12),
-                  _CharacteristicCard(
-                    characteristics: currentResult.characteristics,
-                  ),
-                  const SizedBox(height: 22),
-                  const SectionTitle(title: 'Deskripsi Hasil'),
-                  const SizedBox(height: 12),
-                  InfoCard(child: Text(currentResult.description)),
-                  const SizedBox(height: 18),
-                  const SectionTitle(title: 'Rekomendasi'),
-                  const SizedBox(height: 12),
-                  InfoCard(child: Text(currentResult.recommendation)),
-                  const SizedBox(height: 18),
-                  InfoCard(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(
+              child: isDetected
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
-                          Icons.schedule_rounded,
-                          color: AppColors.primaryBrown,
+                        _BoundingBoxPreview(result: currentResult),
+                        const SizedBox(height: 22),
+                        _ResultSummary(result: currentResult),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Hasil hanya ditampilkan apabila tingkat keyakinan model minimal ${(currentResult.confidenceThreshold * 100).toStringAsFixed(0)}%.',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppColors.greyText,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Waktu deteksi: ${DateFormatter.format(currentResult.detectedAt)}',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
+                        const SizedBox(height: 22),
+                        ConfidenceBar(
+                          value: currentResult.confidencePercent,
+                          color: gradeColor,
+                        ),
+                        const SizedBox(height: 22),
+                        const SectionTitle(title: 'Karakteristik Fisik'),
+                        const SizedBox(height: 12),
+                        _CharacteristicCard(
+                          characteristics: currentResult.characteristics,
+                        ),
+                        const SizedBox(height: 22),
+                        const SectionTitle(title: 'Deskripsi Hasil'),
+                        const SizedBox(height: 12),
+                        InfoCard(child: Text(currentResult.description)),
+                        const SizedBox(height: 18),
+                        const SectionTitle(title: 'Rekomendasi'),
+                        const SizedBox(height: 12),
+                        InfoCard(child: Text(currentResult.recommendation)),
+                        const SizedBox(height: 18),
+                        InfoCard(
+                          padding: const EdgeInsets.all(14),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.schedule_rounded,
+                                color: AppColors.primaryBrown,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Waktu deteksi: ${DateFormatter.format(currentResult.detectedAt)}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        SecondaryButton(
+                          label: AppLanguage.text('save_history', _language),
+                          icon: Icons.save_rounded,
+                          onPressed: _saveHistory,
+                        ),
+                        const SizedBox(height: 12),
+                        PrimaryButton(
+                          label: AppLanguage.text('detect_again', _language),
+                          icon: Icons.refresh_rounded,
+                          onPressed: () => Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const DetectionScreen(
+                                mode: DetectionMode.camera,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SecondaryButton(
+                          label: 'Kembali ke Beranda',
+                          icon: Icons.home_rounded,
+                          onPressed: () => Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const HomeScreen(),
+                            ),
+                            (route) => false,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      children: [
+                        EmptyState(
+                          title: 'Tidak ada biji kopi terdeteksi.',
+                          message: currentResult.message.isNotEmpty
+                              ? currentResult.message
+                              : 'Silakan ambil gambar ulang dengan pencahayaan yang cukup dan objek biji kopi terlihat jelas.',
+                          icon: Icons.search_off_rounded,
+                        ),
+                        PrimaryButton(
+                          label: AppLanguage.text('detect_again', _language),
+                          icon: Icons.refresh_rounded,
+                          onPressed: () => Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const DetectionScreen(
+                                mode: DetectionMode.camera,
+                              ),
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  SecondaryButton(
-                    label: AppLanguage.text('save_history', _language),
-                    icon: Icons.save_rounded,
-                    onPressed: _saveHistory,
-                  ),
-                  const SizedBox(height: 12),
-                  PrimaryButton(
-                    label: AppLanguage.text('detect_again', _language),
-                    icon: Icons.refresh_rounded,
-                    onPressed: () => Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const DetectionScreen(
-                          mode: DetectionMode.camera,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SecondaryButton(
-                    label: 'Kembali ke Beranda',
-                    icon: Icons.home_rounded,
-                    onPressed: () => Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(builder: (_) => const HomeScreen()),
-                      (route) => false,
-                    ),
-                  ),
-                ],
-              ),
             ),
           ),
         ),
@@ -149,6 +183,7 @@ class _ResultScreenState extends State<ResultScreen> {
   }
 
   Future<void> _saveHistory() async {
+    if (!widget.result.isDetected) return;
     await _historyService.saveResult(widget.result);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

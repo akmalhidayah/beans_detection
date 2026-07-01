@@ -157,9 +157,15 @@ class _DetectionScreenState extends State<DetectionScreen> {
     try {
       final backendOnline = await _apiService.checkHealth();
       if (!backendOnline) {
-        throw Exception('Backend offline. Pastikan server sedang berjalan.');
+        throw Exception(
+          'Tidak dapat terhubung ke server. Pastikan backend aktif dan koneksi internet tersedia.',
+        );
       }
-      result = await _apiService.predictImage(selectedImage);
+      final user = await _authService.getUser();
+      result = await _apiService.predictImage(
+        selectedImage,
+        authToken: user.authToken,
+      );
     } catch (exception) {
       if (mounted) {
         _showMessage(_friendlyError(exception));
@@ -173,6 +179,22 @@ class _DetectionScreenState extends State<DetectionScreen> {
 
     final prediction = result;
     if (!mounted || prediction == null) return;
+    if (prediction.isNotDetected) {
+      _showMessage(
+        prediction.message.isNotEmpty
+            ? '${prediction.message}\nHasil hanya ditampilkan apabila tingkat keyakinan model minimal 50%.'
+            : 'Tidak ada biji kopi terdeteksi. Silakan ambil gambar ulang dengan pencahayaan yang cukup dan objek biji kopi terlihat jelas.\nHasil hanya ditampilkan apabila tingkat keyakinan model minimal 50%.',
+      );
+      return;
+    }
+    if (prediction.isError) {
+      _showMessage(
+        prediction.message.isNotEmpty
+            ? prediction.message
+            : 'Deteksi gagal diproses. Silakan coba kembali.',
+      );
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => ResultScreen(result: prediction)),

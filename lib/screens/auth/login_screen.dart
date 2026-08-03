@@ -129,19 +129,14 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     setState(() => _isLoading = true);
-    final success = await _authService.login(email: email, password: password);
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-
-    if (!success) {
-      _showMessage('Email atau password tidak sesuai.');
-      return;
+    try {
+      await _authService.login(email: email, password: password);
+      if (mounted) _openHome();
+    } catch (error) {
+      if (mounted) _showMessage(error.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
-    );
   }
 
   Future<void> _loginWithGoogle() async {
@@ -150,35 +145,22 @@ class _LoginScreenState extends State<LoginScreen> {
       await _authService.signInWithGoogleAccount();
     } catch (error) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
-      _showMessage(error.toString().replaceFirst('Exception: ', ''));
+      _showMessage(error.toString());
       return;
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
     if (!mounted) return;
-    setState(() => _isLoading = false);
     _openHome();
   }
 
   Future<void> _loginWithPhone() async {
-    final phone = await _showInputDialog(
-      title: 'Masuk Nomor Telepon',
-      label: 'Nomor Telepon',
-      icon: Icons.phone_android_rounded,
-      keyboardType: TextInputType.phone,
+    _showMessage(
+      'Login nomor telepon belum tersedia karena verifikasi OTP belum dikonfigurasi.',
     );
-    if (phone == null) return;
-    if (phone.length < 8) {
-      _showMessage('Nomor telepon belum valid.');
-      return;
-    }
-
-    setState(() => _isLoading = true);
-    await _authService.signInWithPhone(phone: phone);
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-    _openHome();
   }
 
+  // ignore: unused_element, retained to preserve the existing visual dialog.
   Future<String?> _showInputDialog({
     required String title,
     required String label,

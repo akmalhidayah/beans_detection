@@ -130,7 +130,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadData() async {
     final user = await _authService.getUser();
-    final history = await _historyService.getHistory();
+    final history = await _historyService.getHistory(
+      userId: user.id,
+      email: user.email,
+    );
     if (!mounted) return;
     setState(() {
       _user = user;

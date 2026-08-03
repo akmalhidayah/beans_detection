@@ -165,7 +165,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _loadData() async {
-    final results = await _historyService.getHistory();
+    final user = await _authService.getUser();
+    final results = await _historyService.getHistory(
+      userId: user.id,
+      email: user.email,
+    );
     final language = await _authService.getLanguage();
     if (!mounted) return;
     setState(() {

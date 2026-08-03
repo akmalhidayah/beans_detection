@@ -6,6 +6,9 @@ class BoundingBox {
     required this.height,
     required this.confidence,
     this.label = '',
+    this.className = '',
+    this.coffeeType = '',
+    this.grade = '',
   });
 
   final double x;
@@ -14,18 +17,28 @@ class BoundingBox {
   final double height;
   final double confidence;
   final String label;
+  final String className;
+  final String coffeeType;
+  final String grade;
 
   double get left => x;
   double get top => y;
 
   factory BoundingBox.fromJson(Map<String, dynamic> json) {
+    final x = _toDouble(json['x']).clamp(0.0, 1.0).toDouble();
+    final y = _toDouble(json['y']).clamp(0.0, 1.0).toDouble();
+    final rawWidth = _toDouble(json['width']);
+    final rawHeight = _toDouble(json['height']);
     return BoundingBox(
-      x: _toDouble(json['x']),
-      y: _toDouble(json['y']),
-      width: _toDouble(json['width']),
-      height: _toDouble(json['height']),
-      confidence: _toDouble(json['confidence']),
+      x: x,
+      y: y,
+      width: rawWidth.clamp(0.0, 1.0 - x).toDouble(),
+      height: rawHeight.clamp(0.0, 1.0 - y).toDouble(),
+      confidence: _normalizeConfidence(_toDouble(json['confidence'])),
       label: json['label']?.toString() ?? '',
+      className: json['class_name']?.toString() ?? '',
+      coffeeType: json['coffee_type']?.toString() ?? '',
+      grade: json['grade']?.toString() ?? '',
     );
   }
 
@@ -37,6 +50,9 @@ class BoundingBox {
       'height': height,
       'confidence': confidence,
       'label': label,
+      'class_name': className,
+      'coffee_type': coffeeType,
+      'grade': grade,
     };
   }
 
@@ -44,4 +60,7 @@ class BoundingBox {
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? 0;
   }
+
+  static double _normalizeConfidence(double value) =>
+      (value > 1 ? value / 100 : value).clamp(0.0, 1.0).toDouble();
 }

@@ -10,10 +10,14 @@ dependencies:
   file_picker: ^11.0.2
   flutter:
     sdk: flutter
+  flutter_image_compress: ^2.4.0
+  flutter_secure_storage: ^9.2.4
   google_sign_in: ^7.2.0
   http: ^1.2.2
   http_parser: ^4.0.2
   image_picker: ^1.1.2
+  path: ^1.9.1
+  path_provider: ^2.1.5
   shared_preferences: ^2.3.2
   url_launcher: ^6.3.2
 
@@ -25,10 +29,11 @@ dev_dependencies:
 
 flutter_launcher_icons:
   android: true
-  ios: false
+  ios: true
   image_path: "assets/icon/app_icon.png"
   adaptive_icon_background: "#FFF8EC"
   adaptive_icon_foreground: "assets/icon/app_icon.png"
+  remove_alpha_ios: true
   min_sdk_android: 21
 
 flutter:

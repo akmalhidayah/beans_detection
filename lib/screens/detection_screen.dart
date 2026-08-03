@@ -127,7 +127,9 @@ class _DetectionScreenState extends State<DetectionScreen> {
     try {
       final pickedImage = await _imagePicker.pickImage(
         source: _isCameraMode ? ImageSource.camera : ImageSource.gallery,
-        imageQuality: 92,
+        imageQuality: 84,
+        maxWidth: 1600,
+        maxHeight: 1600,
       );
 
       if (pickedImage == null) return;
@@ -155,16 +157,10 @@ class _DetectionScreenState extends State<DetectionScreen> {
     DetectionResult? result;
 
     try {
-      final backendOnline = await _apiService.checkHealth();
-      if (!backendOnline) {
-        throw Exception(
-          'Tidak dapat terhubung ke server. Pastikan backend aktif dan koneksi internet tersedia.',
-        );
-      }
-      final user = await _authService.getUser();
+      final token = await _authService.getAuthToken();
       result = await _apiService.predictImage(
         selectedImage,
-        authToken: user.authToken,
+        authToken: token,
       );
     } catch (exception) {
       if (mounted) {
@@ -202,7 +198,7 @@ class _DetectionScreenState extends State<DetectionScreen> {
   }
 
   String _friendlyError(Object error) {
-    return error.toString().replaceFirst('Exception: ', '');
+    return error.toString();
   }
 
   void _showLoadingDialog() {

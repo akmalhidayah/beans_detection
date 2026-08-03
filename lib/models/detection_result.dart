@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'bounding_box.dart';
+import 'detection_summary.dart';
 
 class DetectionResult {
   DetectionResult({
@@ -25,8 +26,15 @@ class DetectionResult {
     this.totalDetected = 0,
     this.confidenceThreshold = 0.5,
     this.detections = const [],
+    DetectionSummary? summary,
+    this.characteristicsSource = '',
+    this.characteristicsNote = '',
+    this.recommendationSource = '',
+    this.recommendationNote = '',
+    this.aggregationMethod = '',
   })  : className = className ?? _buildClassName(coffeeType, grade),
-        confidencePercent = confidencePercent ?? _normalizePercent(confidence);
+        confidencePercent = confidencePercent ?? _normalizePercent(confidence),
+        summary = summary ?? DetectionSummary.empty();
 
   final String id;
   final String? imagePath;
@@ -48,6 +56,12 @@ class DetectionResult {
   final int totalDetected;
   final double confidenceThreshold;
   final List<Map<String, dynamic>> detections;
+  final DetectionSummary summary;
+  final String characteristicsSource;
+  final String characteristicsNote;
+  final String recommendationSource;
+  final String recommendationNote;
+  final String aggregationMethod;
 
   String get confidenceText => '${confidencePercent.toStringAsFixed(1)}%';
 
@@ -78,26 +92,42 @@ class DetectionResult {
     final responseStatus =
         _normalizeResponseStatus(rawStatus, fallbackDetected: true);
     final detections = _parseDetectionMaps(api['detections']);
-    final firstDetection = detections.isNotEmpty ? detections.first : null;
+    final firstDetection = detections.isEmpty ? null : detections.first;
+    final summaryJson = json['summary'] is Map
+        ? Map<String, dynamic>.from(json['summary'])
+        : data['summary'] is Map
+            ? Map<String, dynamic>.from(data['summary'])
+            : null;
+    final parsedSummary = summaryJson == null
+        ? null
+        : DetectionSummary.fromJson(summaryJson);
     final className = api['class_name']?.toString() ??
         api['label']?.toString() ??
+        (parsedSummary?.dominantClass != '-' ? parsedSummary?.dominantClass : null) ??
         firstDetection?['class_name']?.toString() ??
         firstDetection?['label']?.toString() ??
         (responseStatus == 'detected' ? '' : 'Tidak Terdeteksi');
     final coffeeType = api['coffee_type']?.toString() ??
         api['jenis_kopi']?.toString() ??
+        (parsedSummary?.dominantCoffeeType != '-'
+            ? parsedSummary?.dominantCoffeeType
+            : null) ??
         firstDetection?['coffee_type']?.toString() ??
         firstDetection?['jenis_kopi']?.toString() ??
         '-';
     final grade = api['grade']?.toString() ??
+        (parsedSummary?.dominantGrade != '-' ? parsedSummary?.dominantGrade : null) ??
         firstDetection?['grade']?.toString() ??
         '-';
-    final confidence = _toDouble(
-      api['confidence'] ?? firstDetection?['confidence'],
-    );
-    final boxesJson = api['bounding_boxes'] ??
-        api['boundingBoxes'] ??
-        _boxesFromDetections(detections);
+    final confidence = _toDouble(api['confidence'] ??
+        parsedSummary?.dominantAverageConfidence ?? firstDetection?['confidence']);
+    final dataBoxes = data['bounding_boxes'] ?? data['boundingBoxes'];
+    final rootBoxes = json['bounding_boxes'] ?? json['boundingBoxes'];
+    final boxesJson = dataBoxes is List && dataBoxes.isNotEmpty
+        ? dataBoxes
+        : rootBoxes is List && rootBoxes.isNotEmpty
+            ? rootBoxes
+            : _boxesFromDetections(detections);
     final boxes = _parseBoundingBoxes(
       boxesJson,
       className.isEmpty ? _buildClassName(coffeeType, grade) : className,
@@ -106,28 +136,40 @@ class DetectionResult {
       api['total_detected'] ?? api['totalDetected'],
       fallback: detections.isNotEmpty ? detections.length : boxes.length,
     );
+    final summary = parsedSummary ?? DetectionSummary.fromLegacy(
+      detections: detections,
+      className: className,
+      coffeeType: coffeeType,
+      grade: grade,
+      totalDetected: totalDetected,
+      confidence: confidence,
+    );
 
     return DetectionResult(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       imagePath: localImagePath,
-      imageName: api['image_name']?.toString() ?? api['imageName']?.toString() ?? '',
+      imageName:
+          api['image_name']?.toString() ?? api['imageName']?.toString() ?? '',
       className: className.isEmpty ? null : className,
       coffeeType: coffeeType,
       grade: grade,
       confidence: confidence,
-      confidencePercent: _toDouble(
-        api['confidence_percent'] ?? api['confidencePercent'],
-      ),
+      confidencePercent: (api['confidence_percent'] ??
+                  api['confidencePercent']) ==
+              null
+          ? _normalizePercent(confidence)
+          : _toDouble(api['confidence_percent'] ?? api['confidencePercent']),
       status: _qualityStatus(data['status'] ?? api['status'], responseStatus),
-      description: api['description']?.toString() ??
-          api['message']?.toString() ??
-          '-',
+      description:
+          api['description']?.toString() ?? api['message']?.toString() ?? '-',
       recommendation: api['recommendation']?.toString() ??
           api['rekomendasi']?.toString() ??
           firstDetection?['recommendation']?.toString() ??
           firstDetection?['rekomendasi']?.toString() ??
           '-',
-      detectedAt: _parseDate(api['detected_at'] ?? api['detectedAt']) ??
+      detectedAt: _parseDate(api['detected_at'] ??
+              api['detectedAt'] ??
+              firstDetection?['detected_at']) ??
           DateTime.now(),
       characteristics: _parseCharacteristics(
         api['characteristics'] ??
@@ -144,6 +186,12 @@ class DetectionResult {
         api['confidence_threshold'] ?? api['confidenceThreshold'] ?? 0.5,
       ),
       detections: detections,
+      summary: summary,
+      characteristicsSource: api['characteristics_source']?.toString() ?? '',
+      characteristicsNote: api['characteristics_note']?.toString() ?? '',
+      recommendationSource: api['recommendation_source']?.toString() ?? '',
+      recommendationNote: api['recommendation_note']?.toString() ?? '',
+      aggregationMethod: api['aggregation_method']?.toString() ?? '',
     );
   }
 
@@ -156,7 +204,8 @@ class DetectionResult {
     final responseStatus = _normalizeResponseStatus(
       json['responseStatus'] ?? json['apiStatus'],
       fallbackDetected:
-          (className != null && className != 'Tidak Terdeteksi') && grade != '-',
+          (className != null && className != 'Tidak Terdeteksi') &&
+              grade != '-',
     );
     return DetectionResult(
       id: json['id']?.toString() ??
@@ -185,6 +234,23 @@ class DetectionResult {
       totalDetected: _toInt(json['totalDetected']),
       confidenceThreshold: _toDouble(json['confidenceThreshold'] ?? 0.5),
       detections: _parseDetectionMaps(json['detections']),
+      summary: json['summary'] is Map
+          ? DetectionSummary.fromJson(Map<String, dynamic>.from(json['summary']))
+          : DetectionSummary.fromLegacy(
+              detections: _parseDetectionMaps(json['detections']),
+              className: className ?? _buildClassName(
+                json['coffeeType']?.toString() ?? '-', grade,
+              ),
+              coffeeType: json['coffeeType']?.toString() ?? '-',
+              grade: grade,
+              totalDetected: _toInt(json['totalDetected']),
+              confidence: confidence,
+            ),
+      characteristicsSource: json['characteristicsSource']?.toString() ?? '',
+      characteristicsNote: json['characteristicsNote']?.toString() ?? '',
+      recommendationSource: json['recommendationSource']?.toString() ?? '',
+      recommendationNote: json['recommendationNote']?.toString() ?? '',
+      aggregationMethod: json['aggregationMethod']?.toString() ?? '',
     );
   }
 
@@ -210,7 +276,44 @@ class DetectionResult {
       'totalDetected': totalDetected,
       'confidenceThreshold': confidenceThreshold,
       'detections': detections,
+      'summary': summary.toJson(),
+      'characteristicsSource': characteristicsSource,
+      'characteristicsNote': characteristicsNote,
+      'recommendationSource': recommendationSource,
+      'recommendationNote': recommendationNote,
+      'aggregationMethod': aggregationMethod,
     };
+  }
+
+  DetectionResult copyWith({String? imagePath, Uint8List? imageBytes}) {
+    return DetectionResult(
+      id: id,
+      imagePath: imagePath ?? this.imagePath,
+      imageName: imageName,
+      className: className,
+      coffeeType: coffeeType,
+      grade: grade,
+      confidence: confidence,
+      confidencePercent: confidencePercent,
+      status: status,
+      description: description,
+      recommendation: recommendation,
+      detectedAt: detectedAt,
+      characteristics: characteristics,
+      boundingBoxes: boundingBoxes,
+      imageBytes: imageBytes ?? this.imageBytes,
+      responseStatus: responseStatus,
+      message: message,
+      totalDetected: totalDetected,
+      confidenceThreshold: confidenceThreshold,
+      detections: detections,
+      summary: summary,
+      characteristicsSource: characteristicsSource,
+      characteristicsNote: characteristicsNote,
+      recommendationSource: recommendationSource,
+      recommendationNote: recommendationNote,
+      aggregationMethod: aggregationMethod,
+    );
   }
 
   static String _buildClassName(String coffeeType, String grade) {
@@ -289,7 +392,7 @@ class DetectionResult {
   ) {
     return detections
         .map((detection) => detection['bbox'] ?? detection['bounding_box'])
-        .where((box) => box is Map)
+        .whereType<Map>()
         .toList();
   }
 
@@ -302,6 +405,7 @@ class DetectionResult {
             Map<String, dynamic>.from(box),
           ),
         )
+        .where((box) => box.width > 0 && box.height > 0)
         .map(
           (box) => BoundingBox(
             x: box.x,
@@ -310,6 +414,9 @@ class DetectionResult {
             height: box.height,
             confidence: box.confidence,
             label: box.label.isEmpty ? label : box.label,
+            className: box.className,
+            coffeeType: box.coffeeType,
+            grade: box.grade,
           ),
         )
         .toList();

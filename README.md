@@ -43,3 +43,40 @@ lib/
 ├── services/          # Service untuk API, autentikasi, riwayat, dan model
 ├── app.dart           # Konfigurasi aplikasi
 └── main.dart          # Entry point aplikasi
+```
+
+# Production dan iOS
+
+API production aplikasi adalah `https://api-beans.wisataku.web.id`. Model YOLO tetap
+berada di server; aplikasi hanya mengirim gambar melalui HTTPS.
+
+Jalankan development dengan konfigurasi environment:
+
+```sh
+flutter run \
+  --dart-define=API_BASE_URL=https://api-beans.wisataku.web.id \
+  --dart-define=GOOGLE_SERVER_CLIENT_ID=ISI_SERVER_CLIENT_ID \
+  --dart-define=GOOGLE_IOS_CLIENT_ID=ISI_IOS_CLIENT_ID
+```
+
+Untuk iOS, buat OAuth Client bertipe iOS di Google Cloud dengan Bundle ID
+`com.akmalhidayah.beansdetection`. Isi iOS Client ID dan reversed client ID pada
+konfigurasi lokal berdasarkan `ios/Flutter/GoogleSignIn.xcconfig.example`. Server
+client ID harus sama dengan `GOOGLE_CLIENT_ID` backend. Jangan memasukkan client
+secret ke aplikasi.
+
+```sh
+flutter pub get
+cd ios
+pod install
+cd ..
+open ios/Runner.xcworkspace
+```
+
+Di Xcode pilih Runner, buka Signing & Capabilities, aktifkan Automatically manage
+signing, pilih Team, pastikan Bundle ID benar, aktifkan Developer Mode pada iPhone,
+lalu pilih iPhone sebagai target. Build tanpa signing dapat dijalankan dengan
+`flutter build ios --no-codesign`.
+
+Login nomor telepon belum aktif sampai backend menyediakan OTP. Google Sign-In iOS
+memerlukan OAuth Client tipe iOS dan URL scheme reversed client ID.

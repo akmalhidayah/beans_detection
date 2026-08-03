@@ -7,7 +7,9 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/config/api_config.dart';
+import '../core/errors/app_exceptions.dart';
 import '../core/utils/app_language.dart';
+import 'secure_session_storage.dart';
 
 class LocalUser {
   const LocalUser({
@@ -25,52 +27,51 @@ class LocalUser {
     this.lastLoginAt,
     this.lastSeenAt,
   });
-
-  final String id;
-  final String name;
-  final String email;
-  final String location;
-  final String language;
-  final String phone;
-  final String authProvider;
-  final bool syncedOnline;
-  final String authToken;
-  final String role;
-  final bool isActive;
-  final DateTime? lastLoginAt;
-  final DateTime? lastSeenAt;
-
+  final String id, name, email, location, language, phone, authProvider;
+  final bool syncedOnline, isActive;
+  final String authToken, role;
+  final DateTime? lastLoginAt, lastSeenAt;
   bool get isAdmin => role.toLowerCase() == 'admin';
   bool get isUser => role.toLowerCase() == 'user';
 }
 
 class LocalAuthService {
-  static const _isLoggedInKey = 'isLoggedIn';
-  static const _idKey = 'id';
-  static const _nameKey = 'name';
-  static const _emailKey = 'email';
-  static const _passwordKey = 'password';
-  static const _locationKey = 'location';
-  static const _languageKey = 'language';
-  static const _phoneKey = 'phone';
-  static const _authProviderKey = 'authProvider';
-  static const _syncedOnlineKey = 'syncedOnline';
-  static const _authTokenKey = 'authToken';
-  static const _roleKey = 'role';
-  static const _isActiveKey = 'isActive';
-  static const _lastLoginAtKey = 'lastLoginAt';
-  static const _lastSeenAtKey = 'lastSeenAt';
+  LocalAuthService({http.Client? client, SessionStorage? sessionStorage})
+      : _client = client ?? http.Client(),
+        _sessionStorage = sessionStorage ?? SecureSessionStorage();
+
+  final http.Client _client;
+  final SessionStorage _sessionStorage;
+  static const _sessionKeys = <String>[
+    'id',
+    'name',
+    'email',
+    'location',
+    'phone',
+    'authProvider',
+    'syncedOnline',
+    'role',
+    'isActive',
+    'lastLoginAt',
+    'lastSeenAt',
+    'isLoggedIn',
+  ];
   static bool _googleInitialized = false;
-  static Future<void>? _googleInitializeFuture;
 
   Future<bool> isLoggedIn() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_isLoggedInKey) ?? false;
+    try {
+      final token = await _sessionStorage.readToken();
+      if (token.isEmpty) return false;
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool('isLoggedIn') ?? true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<bool> hasAccount() async {
     final prefs = await SharedPreferences.getInstance();
-    return (prefs.getString(_emailKey) ?? '').isNotEmpty;
+    return (prefs.getString('email') ?? '').isNotEmpty;
   }
 
   Future<void> register({
@@ -79,485 +80,320 @@ class LocalAuthService {
     required String password,
     String location = 'Desa Masewe, Mamasa',
   }) async {
-    final session = await _registerRemote(
-      name: name,
-      email: email,
-      password: password,
-      location: location,
-      authProvider: 'email',
-    );
-    final user = session?.user ??
-        LocalUser(
-          name: name,
-          email: email.trim().toLowerCase(),
-          location: location,
-          language: AppLanguage.indonesia,
-          role: 'user',
-        );
-    await _saveSession(
-      user: user,
-      syncedOnline: session != null,
-      authToken: session?.token ?? '',
-    );
+    final response = await _post(ApiConfig.registerEndpoint, {
+      'name': name,
+      'email': email.trim().toLowerCase(),
+      'password': password,
+      'location': location,
+      'auth_provider': 'email',
+    });
+    final session = _requireSession(response);
+    await _saveSession(session);
   }
 
-  Future<void> signInWithGoogle({
-    required String email,
-    String? name,
-  }) async {
-    final normalizedEmail = email.trim().toLowerCase();
-    final displayName = (name == null || name.trim().isEmpty)
-        ? normalizedEmail.split('@').first
-        : name.trim();
-    final session = await _registerRemote(
-      name: displayName,
-      email: normalizedEmail,
-      password: '',
-      location: 'Desa Masewe, Mamasa',
-      authProvider: 'google',
-    );
-    final user = session?.user ??
-        LocalUser(
-          name: displayName,
-          email: normalizedEmail,
-          location: 'Desa Masewe, Mamasa',
-          language: AppLanguage.indonesia,
-          authProvider: 'google',
-        );
-    await _saveSession(
-      user: user,
-      syncedOnline: session != null,
-      authToken: session?.token ?? '',
-    );
+  Future<bool> login({required String email, required String password}) async {
+    final response = await _post(ApiConfig.loginEndpoint, {
+      'email': email.trim().toLowerCase(),
+      'password': password,
+    });
+    final session = _requireSession(response);
+    await _saveSession(session);
+    return true;
   }
 
   Future<void> signInWithGoogleAccount() async {
-    await _ensureGoogleInitialized();
-    if (!GoogleSignIn.instance.supportsAuthenticate()) {
-      throw Exception(
-        kIsWeb
-            ? 'Login Google web harus memakai tombol resmi Google. Untuk test APK, jalankan di emulator Android.'
-            : 'Google Sign-In belum didukung di platform ini.',
+    final clientId = defaultTargetPlatform == TargetPlatform.iOS
+        ? ApiConfig.googleIosClientId
+        : (kIsWeb ? ApiConfig.googleWebClientId : '');
+    if ((defaultTargetPlatform == TargetPlatform.iOS && clientId.isEmpty) ||
+        ApiConfig.googleServerClientId.isEmpty) {
+      throw const ValidationException(
+        'Login Google belum dikonfigurasi untuk perangkat ini.',
       );
     }
-
+    if (!_googleInitialized) {
+      await GoogleSignIn.instance.initialize(
+        clientId: clientId.isEmpty ? null : clientId,
+        serverClientId: ApiConfig.googleServerClientId,
+      );
+      _googleInitialized = true;
+    }
+    if (!GoogleSignIn.instance.supportsAuthenticate()) {
+      throw const ValidationException(
+        'Login Google belum dikonfigurasi untuk perangkat ini.',
+      );
+    }
     final account = await GoogleSignIn.instance.authenticate();
     final idToken = account.authentication.idToken;
-    if (idToken == null || idToken.isEmpty) {
-      throw Exception(
-        'Token Google tidak tersedia. Pastikan OAuth client sudah dikonfigurasi.',
-      );
+    if (idToken == null || idToken.trim().isEmpty) {
+      throw const AuthenticationException('Token Google tidak tersedia.');
     }
+    final response = await _post(
+      ApiConfig.googleLoginEndpoint,
+      {'id_token': idToken},
+    );
+    await _saveSession(_requireSession(response));
+  }
 
-    final response = await _postJson('/auth/google', {'id_token': idToken});
-    if (response == null) {
-      throw Exception('Tidak dapat terhubung ke backend.');
-    }
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(_messageFromBody(response.body) ?? 'Login Google gagal.');
-    }
-
-    final session = _sessionFromResponse(response.body);
-    await _saveSession(
-      user: session.user,
-      syncedOnline: true,
-      authToken: session.token,
+  @Deprecated('Menunggu endpoint OTP request dan OTP verify di backend.')
+  Future<void> signInWithPhone({required String phone, String? name}) async {
+    throw const ValidationException(
+      'Login nomor telepon belum tersedia karena verifikasi OTP belum dikonfigurasi.',
     );
   }
 
-  Future<void> signInWithPhone({
-    required String phone,
-    String? name,
-  }) async {
-    final normalizedPhone = phone.trim();
-    final start = normalizedPhone.length > 4 ? normalizedPhone.length - 4 : 0;
-    final displayName = (name == null || name.trim().isEmpty)
-        ? 'Pengguna ${normalizedPhone.substring(start)}'
-        : name.trim();
-    final emailAlias = '$normalizedPhone@phone.local';
-    final session = await _registerRemote(
-      name: displayName,
-      email: emailAlias,
-      password: '',
-      location: 'Desa Masewe, Mamasa',
-      phone: normalizedPhone,
-      authProvider: 'phone',
+  @Deprecated('Gunakan signInWithGoogleAccount agar JWT berasal dari backend.')
+  Future<void> signInWithGoogle({required String email, String? name}) async {
+    throw const ValidationException(
+      'Login Google harus dilakukan melalui akun Google pada perangkat.',
     );
-    final user = session?.user ??
-        LocalUser(
-          name: displayName,
-          email: emailAlias,
-          location: 'Desa Masewe, Mamasa',
-          language: AppLanguage.indonesia,
-          phone: normalizedPhone,
-          authProvider: 'phone',
-        );
-    await _saveSession(
-      user: user,
-      syncedOnline: session != null,
-      authToken: session?.token ?? '',
-    );
-  }
-
-  Future<void> _saveSession({
-    required LocalUser user,
-    required bool syncedOnline,
-    required String authToken,
-  }) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_idKey, user.id);
-    await prefs.setString(_nameKey, user.name);
-    await prefs.setString(_emailKey, user.email);
-    await prefs.remove(_passwordKey);
-    await prefs.setString(_locationKey, user.location);
-    await prefs.setString(_languageKey, user.language);
-    await prefs.setString(_phoneKey, user.phone);
-    await prefs.setString(_authProviderKey, user.authProvider);
-    await prefs.setString(_authTokenKey, authToken);
-    await prefs.setString(_roleKey, user.role.isEmpty ? 'user' : user.role);
-    await prefs.setBool(_isActiveKey, user.isActive);
-    await prefs.setString(
-      _lastLoginAtKey,
-      user.lastLoginAt?.toIso8601String() ?? '',
-    );
-    await prefs.setString(
-      _lastSeenAtKey,
-      user.lastSeenAt?.toIso8601String() ?? '',
-    );
-    await prefs.setBool(_syncedOnlineKey, syncedOnline);
-    await prefs.setBool(_isLoggedInKey, true);
-  }
-
-  Future<bool> login({
-    required String email,
-    required String password,
-  }) async {
-    final remoteUser = await _loginRemote(email: email, password: password);
-    if (remoteUser != null) {
-      await _saveSession(
-        user: remoteUser,
-        syncedOnline: true,
-        authToken: remoteUser.authToken,
-      );
-      return true;
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    final savedEmail = prefs.getString(_emailKey);
-    final legacyPassword = prefs.getString(_passwordKey);
-    if (legacyPassword != null &&
-        legacyPassword.isNotEmpty &&
-        savedEmail == email &&
-        legacyPassword == password) {
-      await prefs.remove(_passwordKey);
-      await prefs.setBool(_isLoggedInKey, true);
-      return true;
-    }
-    return false;
   }
 
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_isLoggedInKey, false);
+    final provider = prefs.getString('authProvider') ?? '';
+    await _sessionStorage.deleteToken();
+    for (final key in _sessionKeys) {
+      await prefs.remove(key);
+    }
+    await prefs.remove('password');
+    if (provider == 'google') {
+      try {
+        await GoogleSignIn.instance.signOut();
+      } catch (_) {/* local logout wins */}
+    }
   }
 
   Future<LocalUser> getUser() async {
     final prefs = await SharedPreferences.getInstance();
+    final token = await getAuthToken();
     return LocalUser(
-      id: prefs.getString(_idKey) ?? '',
-      name: prefs.getString(_nameKey) ?? 'Petani Kopi',
-      email: prefs.getString(_emailKey) ?? 'user@example.com',
-      location: prefs.getString(_locationKey) ?? 'Desa Masewe, Mamasa',
-      language: prefs.getString(_languageKey) ?? AppLanguage.indonesia,
-      phone: prefs.getString(_phoneKey) ?? '',
-      authProvider: prefs.getString(_authProviderKey) ?? 'email',
-      syncedOnline: prefs.getBool(_syncedOnlineKey) ?? false,
-      authToken: prefs.getString(_authTokenKey) ?? '',
-      role: prefs.getString(_roleKey) ?? 'user',
-      isActive: prefs.getBool(_isActiveKey) ?? true,
-      lastLoginAt: _parseDate(prefs.getString(_lastLoginAtKey)),
-      lastSeenAt: _parseDate(prefs.getString(_lastSeenAtKey)),
+      id: prefs.getString('id') ?? '',
+      name: prefs.getString('name') ?? 'Petani Kopi',
+      email: prefs.getString('email') ?? '',
+      location: prefs.getString('location') ?? 'Desa Masewe, Mamasa',
+      language: prefs.getString('language') ?? AppLanguage.indonesia,
+      phone: prefs.getString('phone') ?? '',
+      authProvider: prefs.getString('authProvider') ?? 'email',
+      syncedOnline: prefs.getBool('syncedOnline') ?? false,
+      authToken: token,
+      role: prefs.getString('role') ?? 'user',
+      isActive: prefs.getBool('isActive') ?? true,
+      lastLoginAt: _date(prefs.getString('lastLoginAt')),
+      lastSeenAt: _date(prefs.getString('lastSeenAt')),
     );
   }
 
   Future<String> getAuthToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_authTokenKey) ?? '';
+    try {
+      return await _sessionStorage.readToken();
+    } catch (_) {
+      return '';
+    }
   }
 
   Future<String> getToken() => getAuthToken();
 
-  Future<void> updateProfile({
+  Future<LocalUser> updateProfile({
     required String name,
     required String email,
     required String location,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString(_authTokenKey) ?? '';
-    await prefs.setString(_nameKey, name);
-    await prefs.setString(_emailKey, email);
-    await prefs.setString(_locationKey, location);
-    final synced = await _updateProfileRemote(
-      name: name,
-      email: email,
-      location: location,
-      phone: prefs.getString(_phoneKey) ?? '',
-      authProvider: prefs.getString(_authProviderKey) ?? 'email',
-      token: token,
-    );
-    await prefs.setBool(_syncedOnlineKey, synced);
-  }
-
-  Future<String> getLanguage() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_languageKey) ?? AppLanguage.indonesia;
-  }
-
-  Future<void> setLanguage(String language) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_languageKey, language);
-  }
-
-  Future<_AuthSession?> _registerRemote({
-    required String name,
-    required String email,
-    required String password,
-    required String location,
-    required String authProvider,
-    String phone = '',
-  }) async {
-    final response = await _postJson('/auth/register', {
-      'name': name,
-      'email': email,
-      'password': password,
-      'location': location,
-      'phone': phone,
-      'auth_provider': authProvider,
-    });
-    if (response == null ||
-        response.statusCode < 200 ||
-        response.statusCode >= 300) {
-      return null;
-    }
-    try {
-      return _sessionFromResponse(response.body);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<LocalUser?> _loginRemote({
-    required String email,
-    required String password,
-  }) async {
-    final response = await _postJson('/auth/login', {
-      'email': email,
-      'password': password,
-    });
-    if (response == null ||
-        response.statusCode < 200 ||
-        response.statusCode >= 300) {
-      return null;
-    }
-
-    try {
-      final session = _sessionFromResponse(response.body);
-      return LocalUser(
-        id: session.user.id,
-        name: session.user.name,
-        email: session.user.email,
-        location: session.user.location,
-        language: session.user.language,
-        phone: session.user.phone,
-        authProvider: session.user.authProvider,
-        syncedOnline: true,
-        authToken: session.token,
-        role: session.user.role,
-        isActive: session.user.isActive,
-        lastLoginAt: session.user.lastLoginAt,
-        lastSeenAt: session.user.lastSeenAt,
+    final current = await getUser();
+    final token = await getAuthToken();
+    if (token.isEmpty) {
+      throw const AuthenticationException(
+        'Sesi login tidak ditemukan. Silakan login ulang.',
       );
-    } catch (_) {
-      return null;
     }
+    late final http.Response response;
+    try {
+      response = await _post(
+        ApiConfig.profileEndpoint,
+        {
+          'name': name.trim(),
+          'email': email.trim().toLowerCase(),
+          'location': location.trim(),
+          'phone': current.phone,
+        },
+        token: token,
+      );
+    } on AuthenticationException catch (error) {
+      if (error.statusCode == 401) throw const SessionExpiredException();
+      rethrow;
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) {
+      throw const FormatException('Response server tidak valid.');
+    }
+    final root = Map<String, dynamic>.from(decoded);
+    final data = root['data'] is Map
+        ? Map<String, dynamic>.from(root['data'])
+        : root;
+    final userData = data['user'] is Map
+        ? Map<String, dynamic>.from(data['user'])
+        : data;
+    final updated = _user(userData, token);
+    await _saveSession(_AuthSession(token, updated));
+    return updated;
   }
 
-  Future<bool> _updateProfileRemote({
-    required String name,
-    required String email,
-    required String location,
-    required String phone,
-    required String authProvider,
-    required String token,
-  }) async {
-    final response = await _postJson(
-      '/users/profile',
-      {
-        'name': name,
-        'email': email,
-        'location': location,
-        'phone': phone,
-        'auth_provider': authProvider,
-      },
-      token: token,
-    );
-    return response != null &&
-        response.statusCode >= 200 &&
-        response.statusCode < 300;
-  }
+  Future<String> getLanguage() async =>
+      (await SharedPreferences.getInstance()).getString('language') ??
+      AppLanguage.indonesia;
+  Future<void> setLanguage(String value) async =>
+      (await SharedPreferences.getInstance()).setString('language', value);
 
-  Future<http.Response?> _postJson(
+  Future<http.Response> _post(
     String path,
     Map<String, dynamic> body, {
     String token = '',
   }) async {
-    final headers = {'Content-Type': 'application/json'};
-    if (token.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $token';
-    }
     try {
-      return await http
+      final response = await _client
           .post(
-            Uri.parse('${ApiConfig.baseUrl}$path'),
-            headers: headers,
+            ApiConfig.uri(path),
+            headers: {
+              'Content-Type': 'application/json',
+              if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+            },
             body: jsonEncode(body),
           )
-          .timeout(const Duration(seconds: 6));
-    } on TimeoutException {
-      return null;
-    } on http.ClientException {
-      return null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<void> _ensureGoogleInitialized() async {
-    if (_googleInitialized) return;
-    _googleInitializeFuture ??= GoogleSignIn.instance
-        .initialize(
-      clientId:
-          ApiConfig.googleClientId.isEmpty ? null : ApiConfig.googleClientId,
-      serverClientId: kIsWeb || ApiConfig.googleServerClientId.isEmpty
-          ? null
-          : ApiConfig.googleServerClientId,
-    )
-        .catchError((Object error) {
-      final message = error.toString();
-      if (message.contains('init() has already been called')) {
-        return;
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw _exceptionFor(response);
       }
-      throw error;
-    });
-    await _googleInitializeFuture;
-    _googleInitialized = true;
+      return response;
+    } on ApiException {
+      rethrow;
+    } on TimeoutException {
+      throw const NetworkException();
+    } on http.ClientException {
+      throw const NetworkException();
+    }
   }
 
-  _AuthSession _sessionFromResponse(String body) {
-    final decoded = jsonDecode(body);
-    if (decoded is! Map<String, dynamic>) {
-      throw const FormatException('Format response backend tidak sesuai.');
+  ApiException _exceptionFor(http.Response response) {
+    final message = parseFastApiMessage(response.body);
+    switch (response.statusCode) {
+      case 400:
+      case 401:
+        return AuthenticationException(
+          message.isEmpty ? 'Email atau password salah.' : message,
+          statusCode: response.statusCode,
+        );
+      case 403:
+        return AuthenticationException(
+          message.isEmpty ? 'Akun tidak aktif atau akses ditolak.' : message,
+          statusCode: 403,
+        );
+      case 422:
+        return ValidationException(
+          message.isEmpty ? 'Data yang dikirim tidak valid.' : message,
+        );
+      case 409:
+        return ValidationException(
+          message.isEmpty ? 'Email sudah digunakan akun lain.' : message,
+        );
+      case 429:
+        return const ApiException(
+          'Terlalu banyak percobaan. Silakan tunggu lalu coba lagi.',
+          statusCode: 429,
+        );
+      default:
+        return ApiException(
+          response.statusCode >= 500
+              ? 'Server sedang bermasalah. Silakan coba lagi nanti.'
+              : (message.isEmpty
+                  ? 'Permintaan tidak dapat diproses.'
+                  : message),
+          statusCode: response.statusCode,
+        );
     }
-    final token = _extractToken(decoded);
-    final userData = _extractUserData(decoded);
-    return _AuthSession(
-      token: token,
-      user: _userFromMap(userData, token),
-    );
   }
 
-  String _extractToken(Map<String, dynamic> body) {
-    final rootToken = body['access_token']?.toString() ??
-        body['token']?.toString();
-    if (rootToken != null && rootToken.isNotEmpty) return rootToken;
-
-    final data = body['data'];
-    if (data is Map) {
-      final dataMap = Map<String, dynamic>.from(data);
-      return dataMap['access_token']?.toString() ??
-          dataMap['token']?.toString() ??
-          '';
+  _AuthSession _requireSession(http.Response response) {
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) {
+      throw const FormatException('Response server tidak valid.');
     }
+    final root = Map<String, dynamic>.from(decoded);
+    final data =
+        root['data'] is Map ? Map<String, dynamic>.from(root['data']) : root;
+    final token = (root['access_token'] ??
+                root['token'] ??
+                data['access_token'] ??
+                data['token'])
+            ?.toString()
+            .trim() ??
+        '';
+    if (token.isEmpty) {
+      throw const AuthenticationException(
+        'Server tidak memberikan sesi login yang valid.',
+      );
+    }
+    final nested =
+        data['user'] is Map ? Map<String, dynamic>.from(data['user']) : data;
+    return _AuthSession(token, _user(nested, token));
+  }
+
+  LocalUser _user(Map<String, dynamic> d, String token) => LocalUser(
+        id: d['id']?.toString() ?? '',
+        name: d['name']?.toString() ?? 'Petani Kopi',
+        email: d['email']?.toString() ?? '',
+        location: d['location']?.toString() ?? 'Desa Masewe, Mamasa',
+        language: d['language']?.toString() ?? AppLanguage.indonesia,
+        phone: d['phone']?.toString() ?? '',
+        authProvider:
+            (d['auth_provider'] ?? d['authProvider'])?.toString() ?? 'email',
+        syncedOnline: true,
+        authToken: token,
+        role: d['role']?.toString().toLowerCase() ?? 'user',
+        isActive: d['is_active'] is bool ? d['is_active'] as bool : true,
+        lastLoginAt: _date(d['last_login_at']),
+        lastSeenAt: _date(d['last_seen_at']),
+      );
+
+  Future<void> _saveSession(_AuthSession session) async {
+    await _sessionStorage.writeToken(session.token);
+    final p = await SharedPreferences.getInstance();
+    final u = session.user;
+    await p.setString('id', u.id);
+    await p.setString('name', u.name);
+    await p.setString('email', u.email);
+    await p.setString('location', u.location);
+    await p.setString('phone', u.phone);
+    await p.setString('authProvider', u.authProvider);
+    await p.setString('role', u.role);
+    await p.setBool('isActive', u.isActive);
+    await p.setBool('syncedOnline', true);
+    await p.setBool('isLoggedIn', true);
+    await p.remove('password');
+    await p.remove(SecureSessionStorage.legacyTokenKey);
+  }
+
+  static String parseFastApiMessage(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map) return '';
+      final detail = decoded['detail'] ?? decoded['message'];
+      if (detail is String) return detail;
+      if (detail is List) {
+        return detail.map((item) {
+          if (item is Map) return item['msg']?.toString() ?? item.toString();
+          return item.toString();
+        }).join('; ');
+      }
+    } catch (_) {}
     return '';
   }
 
-  Map<String, dynamic> _extractUserData(Map<String, dynamic> body) {
-    final data = body['data'];
-    if (data is Map) {
-      final dataMap = Map<String, dynamic>.from(data);
-      final nestedUser = dataMap['user'];
-      if (nestedUser is Map) {
-        return {
-          ...dataMap,
-          ...Map<String, dynamic>.from(nestedUser),
-        };
-      }
-      return dataMap;
-    }
-    final user = body['user'];
-    if (user is Map) {
-      return {
-        ...body,
-        ...Map<String, dynamic>.from(user),
-      };
-    }
-    return body;
-  }
-
-  LocalUser _userFromMap(Map<String, dynamic> data, String token) {
-    return LocalUser(
-      id: data['id']?.toString() ?? '',
-      name: data['name']?.toString() ?? 'Petani Kopi',
-      email: data['email']?.toString() ?? 'user@example.com',
-      location: data['location']?.toString() ?? 'Desa Masewe, Mamasa',
-      language: data['language']?.toString() ?? AppLanguage.indonesia,
-      phone: data['phone']?.toString() ?? '',
-      authProvider: data['auth_provider']?.toString() ??
-          data['authProvider']?.toString() ??
-          'email',
-      syncedOnline: true,
-      authToken: token,
-      role: data['role']?.toString().toLowerCase() ?? 'user',
-      isActive: _toBool(data['is_active'] ?? data['isActive'], fallback: true),
-      lastLoginAt: _parseDate(data['last_login_at'] ?? data['lastLoginAt']),
-      lastSeenAt: _parseDate(data['last_seen_at'] ?? data['lastSeenAt']),
-    );
-  }
-
-  String? _messageFromBody(String body) {
-    try {
-      final decoded = jsonDecode(body);
-      if (decoded is Map<String, dynamic>) {
-        return decoded['detail']?.toString() ?? decoded['message']?.toString();
-      }
-    } catch (_) {
-      return null;
-    }
-    return null;
-  }
-
-  static bool _toBool(dynamic value, {required bool fallback}) {
-    if (value is bool) return value;
-    if (value is num) return value != 0;
-    final text = value?.toString().toLowerCase();
-    if (text == 'true') return true;
-    if (text == 'false') return false;
-    return fallback;
-  }
-
-  static DateTime? _parseDate(dynamic value) {
-    final text = value?.toString();
-    if (text == null || text.isEmpty) return null;
-    return DateTime.tryParse(text);
-  }
+  static DateTime? _date(dynamic value) =>
+      DateTime.tryParse(value?.toString() ?? '');
 }
 
 class _AuthSession {
-  const _AuthSession({
-    required this.user,
-    required this.token,
-  });
-
-  final LocalUser user;
+  const _AuthSession(this.token, this.user);
   final String token;
+  final LocalUser user;
 }

@@ -8,241 +8,105 @@ import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../core/config/api_config.dart';
+import '../core/errors/app_exceptions.dart';
 import '../models/detection_result.dart';
+import 'image_preparation_service.dart';
 
 class PredictionApiService {
-  Future<DetectionResult> predictImage(
-    XFile imageFile, {
-    String authToken = '',
-  }) async {
+  PredictionApiService(
+      {http.Client? client, ImagePreparationService? preparation})
+      : _client = client ?? http.Client(),
+        _preparation = preparation ?? ImagePreparationService();
+  final http.Client _client;
+  final ImagePreparationService _preparation;
+
+  Future<DetectionResult> predictImage(XFile source,
+      {String authToken = ''}) async {
     try {
-      Uint8List? imageBytes;
-      final endpoint = '${ApiConfig.baseUrl}${ApiConfig.predictEndpoint}';
-      final mediaType = _imageMediaType(imageFile);
-
-      if (mediaType == null) {
-        throw Exception(
-          'Format gambar tidak didukung. Gunakan JPG, JPEG, atau PNG.',
-        );
-      }
-
-      if (kIsWeb) {
-        imageBytes = await imageFile.readAsBytes();
-        _validateImageBytes(imageBytes);
-      } else {
-        final path = imageFile.path;
-        if (path.isEmpty) {
-          throw Exception('File gambar tidak ditemukan.');
-        }
-        final image = File(path);
-        if (!await image.exists()) {
-          throw Exception('File gambar tidak ditemukan.');
-        }
-        final size = await image.length();
-        _validateImageSize(size);
-      }
-
+      final prepared = await _preparation.prepare(source);
       final request = http.MultipartRequest(
-        'POST',
-        Uri.parse(endpoint),
-      );
-      if (authToken.isNotEmpty) {
-        request.headers['Authorization'] = 'Bearer $authToken';
+          'POST', ApiConfig.uri(ApiConfig.predictEndpoint));
+      if (authToken.trim().isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer ${authToken.trim()}';
       }
-
+      final type = prepared.mimeType.split('/');
       if (kIsWeb) {
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'file',
-            imageBytes!,
-            filename: imageFile.name,
-            contentType: mediaType,
-          ),
-        );
+        request.files.add(http.MultipartFile.fromBytes(
+          'file',
+          prepared.bytes!,
+          filename: prepared.file.name,
+          contentType: MediaType(type[0], type[1]),
+        ));
       } else {
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'file',
-            imageFile.path,
-            contentType: mediaType,
-          ),
-        );
+        request.files.add(await http.MultipartFile.fromPath(
+          'file',
+          prepared.file.path,
+          filename: prepared.file.name,
+          contentType: MediaType(type[0], type[1]),
+        ));
       }
-
-      _debugUploadInfo(
-        endpoint: endpoint,
-        imageFile: imageFile,
-        mediaType: mediaType,
-        sizeBytes: kIsWeb ? imageBytes!.length : await File(imageFile.path).length(),
-      );
-
-      final streamedResponse = await request.send().timeout(
-            const Duration(seconds: 60),
-          );
-      final response = await http.Response.fromStream(streamedResponse);
-      _debugResponse(response);
-      final jsonBody = _decodeMap(response.body);
-
+      final started = DateTime.now();
+      final streamed =
+          await _client.send(request).timeout(const Duration(seconds: 120));
+      final response = await http.Response.fromStream(streamed);
+      if (kDebugMode) {
+        debugPrint(
+            'POST ${ApiConfig.predictEndpoint} -> ${response.statusCode} '
+            '(${DateTime.now().difference(started).inMilliseconds} ms)');
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) {
+        throw const FormatException('Format response server tidak valid.');
+      }
+      final body = Map<String, dynamic>.from(decoded);
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        throw const SessionExpiredException();
+      }
+      if (response.statusCode == 413) {
+        throw const ValidationException('Ukuran gambar melebihi batas 5 MB.');
+      }
+      if (response.statusCode == 422) {
+        throw ValidationException(_message(body, 'File gambar tidak valid.'));
+      }
+      if (response.statusCode >= 500) {
+        throw const ApiException(
+            'Server gagal memproses gambar. Silakan coba lagi.');
+      }
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        final apiStatus = jsonBody['status']?.toString();
-        if (apiStatus == 'error') {
-          return DetectionResult.fromApiJson(
-            jsonBody,
-            localImagePath: kIsWeb ? null : imageFile.path,
-            localImageBytes: imageBytes,
-          );
-        }
-        final message = _messageFromBody(response.body);
-        throw Exception(message ?? 'API gagal memproses gambar.');
+        throw ApiException(_message(body, 'Gambar tidak dapat diproses.'),
+            statusCode: response.statusCode);
       }
-
-      final apiStatus = _statusFromResponse(jsonBody);
-      if (apiStatus == 'error') {
-        return DetectionResult.fromApiJson(
-          jsonBody,
-          localImagePath: kIsWeb ? null : imageFile.path,
-          localImageBytes: imageBytes,
-        );
-      }
-
-      if (apiStatus == 'detected' || apiStatus == 'not_detected') {
-        return DetectionResult.fromApiJson(
-          jsonBody,
-          localImagePath: kIsWeb ? null : imageFile.path,
-          localImageBytes: imageBytes,
-        );
-      }
-
-      final data = jsonBody['data'];
-      if (data is Map) {
-        return DetectionResult.fromApiJson(
-          {
-            'status': 'detected',
-            'data': Map<String, dynamic>.from(data),
-          },
-          localImagePath: kIsWeb ? null : imageFile.path,
-          localImageBytes: imageBytes,
-        );
-      }
-
-      throw const FormatException('Format response backend tidak sesuai.');
+      return DetectionResult.fromApiJson(
+        body,
+        localImagePath: kIsWeb ? null : prepared.file.path,
+        localImageBytes: kIsWeb ? prepared.bytes : null,
+      );
+    } on ApiException {
+      rethrow;
     } on SocketException {
-      throw Exception(
-        'Tidak dapat terhubung ke server. Pastikan backend aktif dan koneksi internet tersedia.',
-      );
+      throw const NetworkException();
     } on TimeoutException {
-      throw Exception(
-        'Tidak dapat terhubung ke server. Pastikan backend aktif dan koneksi internet tersedia.',
-      );
-    } on FormatException catch (error) {
-      throw Exception(error.message);
+      throw const NetworkException('Proses deteksi melewati batas waktu.');
     } on http.ClientException {
-      throw Exception(
-        'Tidak dapat terhubung ke server. Pastikan backend aktif dan koneksi internet tersedia.',
-      );
+      throw const NetworkException();
+    } on FormatException catch (e) {
+      throw ValidationException(e.message);
     }
   }
 
   Future<bool> checkHealth() async {
     try {
-      final response = await http
-          .get(Uri.parse('${ApiConfig.baseUrl}/health'))
-          .timeout(const Duration(seconds: 5));
+      final response = await _client
+          .get(ApiConfig.uri(ApiConfig.healthEndpoint))
+          .timeout(const Duration(seconds: 7));
       return response.statusCode == 200;
     } catch (_) {
       return false;
     }
   }
 
-  Map<String, dynamic> _decodeMap(String body) {
-    final jsonBody = jsonDecode(body);
-    if (jsonBody is! Map<String, dynamic>) {
-      throw const FormatException('Format response backend tidak sesuai.');
-    }
-    return jsonBody;
-  }
-
-  String _statusFromResponse(Map<String, dynamic> body) {
-    final rootStatus = body['status']?.toString();
-    if (_isApiStatus(rootStatus)) return rootStatus!;
-
-    final data = body['data'];
-    if (data is Map) {
-      final dataStatus = data['detection_status']?.toString();
-      if (_isApiStatus(dataStatus)) return dataStatus!;
-      final nestedStatus = data['status']?.toString();
-      if (_isApiStatus(nestedStatus)) return nestedStatus!;
-    }
-
-    if (body['success'] == true) return 'detected';
-    return '';
-  }
-
-  bool _isApiStatus(String? value) {
-    return value == 'detected' || value == 'not_detected' || value == 'error';
-  }
-
-  String? _messageFromBody(String body) {
-    try {
-      final jsonBody = jsonDecode(body);
-      if (jsonBody is Map<String, dynamic>) {
-        return jsonBody['detail']?.toString() ??
-            jsonBody['message']?.toString();
-      }
-    } catch (_) {
-      return null;
-    }
-    return null;
-  }
-
-  MediaType? _imageMediaType(XFile imageFile) {
-    final source = '${imageFile.path} ${imageFile.name}'.toLowerCase();
-    if (source.contains('.jpg') || source.contains('.jpeg')) {
-      return MediaType('image', 'jpeg');
-    }
-    if (source.contains('.png')) {
-      return MediaType('image', 'png');
-    }
-    if (source.contains('.webp') || source.contains('.heic')) {
-      return null;
-    }
-    return null;
-  }
-
-  void _validateImageBytes(Uint8List bytes) {
-    if (bytes.isEmpty) {
-      throw Exception('File gambar tidak ditemukan.');
-    }
-    _validateImageSize(bytes.length);
-  }
-
-  void _validateImageSize(int sizeBytes) {
-    if (sizeBytes <= 0) {
-      throw Exception('File gambar tidak ditemukan.');
-    }
-    const maxBytes = 5 * 1024 * 1024;
-    if (sizeBytes > maxBytes) {
-      throw Exception('Ukuran gambar terlalu besar. Gunakan gambar maksimal 5 MB.');
-    }
-  }
-
-  void _debugUploadInfo({
-    required String endpoint,
-    required XFile imageFile,
-    required MediaType mediaType,
-    required int sizeBytes,
-  }) {
-    if (!kDebugMode) return;
-    debugPrint('Predict upload endpoint: $endpoint');
-    debugPrint('Predict upload path: ${imageFile.path}');
-    debugPrint('Predict upload name: ${imageFile.name}');
-    debugPrint('Predict upload MIME: $mediaType');
-    debugPrint('Predict upload size: $sizeBytes bytes');
-  }
-
-  void _debugResponse(http.Response response) {
-    if (!kDebugMode) return;
-    debugPrint('Predict response status: ${response.statusCode}');
-    debugPrint('Predict response body: ${response.body}');
+  static String _message(Map<String, dynamic> body, String fallback) {
+    final value = body['detail'] ?? body['message'];
+    return value is String && value.isNotEmpty ? value : fallback;
   }
 }

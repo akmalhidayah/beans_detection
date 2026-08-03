@@ -240,7 +240,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadData() async {
     final user = await _authService.getUser();
-    final history = await _historyService.getHistory();
+    final history = await _historyService.getHistory(
+      userId: user.id,
+      email: user.email,
+    );
     final online = await _apiService.checkHealth();
     if (!mounted) return;
     setState(() {
@@ -296,7 +299,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (user?.isAdmin != true) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Akses ditolak. Hanya admin yang dapat mengunggah model.'),
+          content:
+              Text('Akses ditolak. Hanya admin yang dapat mengunggah model.'),
         ),
       );
       return;

@@ -9,6 +9,9 @@ import '../core/config/api_config.dart';
 import 'local_auth_service.dart';
 
 class ModelManagementService {
+  ModelManagementService({http.Client? client})
+      : _client = client ?? http.Client();
+  final http.Client _client;
   Future<void> uploadModel(PlatformFile file) async {
     final authService = LocalAuthService();
     final currentUser = await authService.getUser();
@@ -17,7 +20,8 @@ class ModelManagementService {
       throw Exception('Sesi login tidak ditemukan. Silakan login ulang.');
     }
     if (!currentUser.isAdmin) {
-      throw Exception('Akses ditolak. Hanya admin yang dapat mengunggah model.');
+      throw Exception(
+          'Akses ditolak. Hanya admin yang dapat mengunggah model.');
     }
 
     final extension = file.extension?.toLowerCase();
@@ -28,7 +32,7 @@ class ModelManagementService {
     try {
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('${ApiConfig.baseUrl}${ApiConfig.modelUploadEndpoint}'),
+        ApiConfig.uri(ApiConfig.modelUploadEndpoint),
       );
       request.headers['Authorization'] = 'Bearer $token';
 
@@ -52,12 +56,16 @@ class ModelManagementService {
         request.files.add(await http.MultipartFile.fromPath('file', path));
       }
 
-      final streamedResponse = await request.send().timeout(
+      final streamedResponse = await _client.send(request).timeout(
             const Duration(minutes: 2),
           );
       final response = await http.Response.fromStream(streamedResponse);
       if (response.statusCode == 401 || response.statusCode == 403) {
-        throw Exception('Akses ditolak. Hanya admin yang dapat mengunggah model.');
+        throw Exception(
+            'Akses ditolak. Hanya admin yang dapat mengunggah model.');
+      }
+      if (response.statusCode == 413) {
+        throw Exception('Ukuran file model terlalu besar.');
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception(_messageFromBody(response.body) ??

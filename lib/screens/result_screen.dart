@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
 import '../core/utils/app_language.dart';
 import '../core/utils/date_formatter.dart';
+import '../core/utils/image_box_transform.dart';
 import '../core/widgets/coffee_placeholder.dart';
 import '../core/widgets/confidence_bar.dart';
 import '../core/widgets/empty_state.dart';
@@ -64,6 +65,8 @@ class _ResultScreenState extends State<ResultScreen> {
                         _BoundingBoxPreview(result: currentResult),
                         const SizedBox(height: 22),
                         _ResultSummary(result: currentResult),
+                        const SizedBox(height: 12),
+                        _CompositionCard(result: currentResult),
                         const SizedBox(height: 10),
                         Text(
                           'Hasil hanya ditampilkan apabila tingkat keyakinan model minimal ${(currentResult.confidenceThreshold * 100).toStringAsFixed(0)}%.',
@@ -79,10 +82,13 @@ class _ResultScreenState extends State<ResultScreen> {
                           color: gradeColor,
                         ),
                         const SizedBox(height: 22),
-                        const SectionTitle(title: 'Karakteristik Fisik'),
+                        const SectionTitle(
+                          title: 'Karakteristik Umum Berdasarkan Grade',
+                        ),
                         const SizedBox(height: 12),
                         _CharacteristicCard(
                           characteristics: currentResult.characteristics,
+                          note: currentResult.characteristicsNote,
                         ),
                         const SizedBox(height: 22),
                         const SectionTitle(title: 'Deskripsi Hasil'),
@@ -91,7 +97,12 @@ class _ResultScreenState extends State<ResultScreen> {
                         const SizedBox(height: 18),
                         const SectionTitle(title: 'Rekomendasi'),
                         const SizedBox(height: 12),
-                        InfoCard(child: Text(currentResult.recommendation)),
+                        InfoCard(
+                          child: _RuleBasedText(
+                            text: currentResult.recommendation,
+                            note: currentResult.recommendationNote,
+                          ),
+                        ),
                         const SizedBox(height: 18),
                         InfoCard(
                           padding: const EdgeInsets.all(14),
@@ -184,7 +195,12 @@ class _ResultScreenState extends State<ResultScreen> {
 
   Future<void> _saveHistory() async {
     if (!widget.result.isDetected) return;
-    await _historyService.saveResult(widget.result);
+    final user = await _authService.getUser();
+    await _historyService.saveResult(
+      widget.result,
+      userId: user.id,
+      email: user.email,
+    );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -202,13 +218,17 @@ class _BoundingBoxPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final boxes = result.boundingBoxes;
-    final gradeColor = GradeBadge.gradeColor(result.grade);
     final localImagePath = result.imagePath;
     final imageBytes = result.imageBytes;
     final hasMemoryImage = imageBytes != null && imageBytes.isNotEmpty;
     final hasLocalImage =
         !kIsWeb && localImagePath != null && File(localImagePath).existsSync();
 
+    final imageData = hasMemoryImage
+        ? imageBytes
+        : hasLocalImage
+            ? File(localImagePath).readAsBytesSync()
+            : null;
     return AspectRatio(
       aspectRatio: 1.42,
       child: ClipRRect(
@@ -217,68 +237,120 @@ class _BoundingBoxPreview extends StatelessWidget {
           builder: (context, constraints) {
             final width = constraints.maxWidth;
             final height = constraints.maxHeight;
-            return Stack(
-              children: [
-                Positioned.fill(
-                  child: hasMemoryImage
-                      ? Image.memory(
-                          imageBytes,
-                          fit: BoxFit.cover,
-                        )
-                      : hasLocalImage
-                          ? Image.file(
-                              File(localImagePath),
-                              fit: BoxFit.cover,
+            return FutureBuilder<Size?>(
+              future:
+                  imageData == null ? Future.value() : _imageSize(imageData),
+              builder: (context, snapshot) {
+                final imageSize = snapshot.data;
+                final imageRect = imageSize == null
+                    ? Offset.zero & Size(width, height)
+                    : containedImageRect(
+                        imageSize: imageSize,
+                        viewportSize: Size(width, height),
+                      );
+                return Stack(
+                  children: [
+                    Positioned.fill(
+                      child: hasMemoryImage
+                          ? Image.memory(
+                              imageBytes,
+                              fit: BoxFit.contain,
                             )
-                          : const CoffeePlaceholder(
-                              title: 'Preview hasil deteksi',
-                              subtitle: 'Gambar hasil deteksi biji kopi',
-                            ),
-                ),
-                for (final box in boxes) ...[
-                  Positioned(
-                    left: box.x * width,
-                    top: box.y * height,
-                    width: box.width * width,
-                    height: box.height * height,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: gradeColor, width: 3),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                          : hasLocalImage
+                              ? Image.file(
+                                  File(localImagePath),
+                                  fit: BoxFit.contain,
+                                )
+                              : const CoffeePlaceholder(
+                                  title: 'Preview hasil deteksi',
+                                  subtitle: 'Gambar hasil deteksi biji kopi',
+                                ),
                     ),
-                  ),
-                  Positioned(
-                    left: (box.x * width).clamp(8, width - 120).toDouble(),
-                    top: (box.y * height - 30).clamp(8, height - 40).toDouble(),
-                    child: Container(
-                      constraints: BoxConstraints(maxWidth: width - 16),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: gradeColor,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '${box.label.isEmpty ? result.className : box.label} ${_formatConfidence(box.confidence)}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppColors.white,
-                              fontWeight: FontWeight.w900,
+                    if (imageData != null)
+                      for (final box in boxes) ...[
+                        Positioned(
+                          left: boundingBoxRect(box, imageRect).left,
+                          top: boundingBoxRect(box, imageRect).top,
+                          width: boundingBoxRect(box, imageRect).width,
+                          height: boundingBoxRect(box, imageRect).height,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: GradeBadge.gradeColor(
+                                  box.grade.isEmpty ? result.grade : box.grade,
+                                ),
+                                width: 3,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
+                          ),
+                        ),
+                        Positioned(
+                          left: boundingBoxRect(box, imageRect)
+                              .left
+                              .clamp(
+                                imageRect.left + 8,
+                                (imageRect.right - 120).clamp(
+                                  imageRect.left + 8,
+                                  imageRect.right,
+                                ),
+                              )
+                              .toDouble(),
+                          top: (boundingBoxRect(box, imageRect).top - 30)
+                              .clamp(
+                                imageRect.top + 8,
+                                (imageRect.bottom - 40).clamp(
+                                  imageRect.top + 8,
+                                  imageRect.bottom,
+                                ),
+                              )
+                              .toDouble(),
+                          child: Container(
+                            constraints: BoxConstraints(maxWidth: width - 16),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: GradeBadge.gradeColor(
+                                box.grade.isEmpty ? result.grade : box.grade,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '${box.label.isEmpty ? (box.className.isEmpty ? result.className : box.className) : box.label} ${_formatConfidence(box.confidence)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: AppColors.white,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                            ),
+                          ),
+                        ),
+                      ],
+                  ],
+                );
+              },
             );
           },
         ),
       ),
     );
+  }
+
+  Future<Size?> _imageSize(Uint8List bytes) async {
+    try {
+      final image = await decodeImageFromList(bytes);
+      final size = Size(image.width.toDouble(), image.height.toDouble());
+      image.dispose();
+      return size;
+    } catch (_) {
+      return null;
+    }
   }
 
   String _formatConfidence(double value) {
@@ -304,7 +376,9 @@ class _ResultSummary extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  isDetected ? result.className : result.status,
+                  isDetected
+                      ? 'Kelas dominan: ${result.summary.dominantClass}'
+                      : result.status,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         color: AppColors.darkText,
                         fontWeight: FontWeight.w900,
@@ -315,12 +389,34 @@ class _ResultSummary extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          _ResultRow(label: 'Jenis kopi', value: result.coffeeType),
-          _ResultRow(label: 'Grade kualitas', value: result.grade),
-          _ResultRow(label: 'Confidence', value: result.confidenceText),
+          _ResultRow(
+            label: 'Jenis kopi dominan',
+            value: result.summary.dominantCoffeeType,
+          ),
+          _ResultRow(
+            label: 'Grade dominan',
+            value: result.summary.dominantGrade,
+          ),
+          _ResultRow(
+            label: 'Confidence rata-rata kelas dominan',
+            value: _percentRatio(result.summary.dominantAverageConfidence),
+          ),
           _ResultRow(
             label: 'Objek terdeteksi',
-            value: result.boundingBoxes.length.toString(),
+            value: result.totalDetected.toString(),
+          ),
+          _ResultRow(
+            label: 'Persentase kelas dominan',
+            value: '${result.summary.dominantPercentage.toStringAsFixed(1)}%',
+          ),
+          _ResultRow(
+            label: 'Persentase Grade C',
+            value: '${result.summary.lowQualityPercentage.toStringAsFixed(1)}%',
+          ),
+          _ResultRow(
+            label: 'Perlu sortasi (Grade B + C)',
+            value:
+                '${result.summary.sortingRequiredPercentage.toStringAsFixed(1)}%',
           ),
           _ResultRow(
             label: 'Status kualitas',
@@ -333,6 +429,7 @@ class _ResultSummary extends StatelessWidget {
   }
 }
 
+// ignore: unused_element, retained for compatibility with the alternate result UI.
 class _NotDetectedWarning extends StatelessWidget {
   const _NotDetectedWarning();
 
@@ -407,16 +504,31 @@ class _ResultRow extends StatelessWidget {
 }
 
 class _CharacteristicCard extends StatelessWidget {
-  const _CharacteristicCard({required this.characteristics});
+  const _CharacteristicCard({
+    required this.characteristics,
+    required this.note,
+  });
 
   final Map<String, String> characteristics;
+  final String note;
 
   @override
   Widget build(BuildContext context) {
     final entries = characteristics.entries.toList();
     return InfoCard(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (note.isNotEmpty) ...[
+            Text(
+              note,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: AppColors.greyText),
+            ),
+            const SizedBox(height: 14),
+          ],
           for (var i = 0; i < entries.length; i++)
             Padding(
               padding:
@@ -456,4 +568,68 @@ class _CharacteristicCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _CompositionCard extends StatelessWidget {
+  const _CompositionCard({required this.result});
+
+  final DetectionResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = result.summary.classCounts.entries
+        .where((entry) => entry.value > 0)
+        .toList();
+    return InfoCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Komposisi hasil deteksi',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 12),
+          for (var i = 0; i < entries.length; i++)
+            _ResultRow(
+              label: entries[i].key,
+              value: '${entries[i].value} objek',
+              isLast: i == entries.length - 1,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RuleBasedText extends StatelessWidget {
+  const _RuleBasedText({required this.text, required this.note});
+
+  final String text;
+  final String note;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(text),
+          if (note.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              note,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: AppColors.greyText),
+            ),
+          ],
+        ],
+      );
+}
+
+String _percentRatio(double value) {
+  final percent = value <= 1 ? value * 100 : value;
+  return '${percent.toStringAsFixed(1)}%';
 }

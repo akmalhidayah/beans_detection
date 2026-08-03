@@ -8,24 +8,29 @@ import '../models/admin_user_model.dart';
 import 'local_auth_service.dart';
 
 class AdminService {
+  AdminService({http.Client? client}) : _client = client ?? http.Client();
+  final http.Client _client;
+
   Future<List<AdminUserModel>> fetchUsers() async {
-    final currentUser = await LocalAuthService().getUser();
-    if (!currentUser.isAdmin || currentUser.authToken.isEmpty) {
+    final auth = LocalAuthService();
+    final currentUser = await auth.getUser();
+    final token = await auth.getAuthToken();
+    if (!currentUser.isAdmin || token.isEmpty) {
       throw Exception('Akses ditolak. Fitur ini hanya untuk admin.');
     }
 
     try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}${ApiConfig.adminUsersEndpoint}'),
-        headers: {'Authorization': 'Bearer ${currentUser.authToken}'},
+      final response = await _client.get(
+        ApiConfig.uri(ApiConfig.adminUsersEndpoint),
+        headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 12));
 
       if (response.statusCode == 401 || response.statusCode == 403) {
         throw Exception('Akses ditolak. Fitur ini hanya untuk admin.');
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(_messageFromBody(response.body) ??
-            'Gagal mengambil daftar user.');
+        throw Exception(
+            _messageFromBody(response.body) ?? 'Gagal mengambil daftar user.');
       }
 
       final decoded = jsonDecode(response.body);

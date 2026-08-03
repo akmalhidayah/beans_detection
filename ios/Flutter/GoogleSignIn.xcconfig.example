@@ -1,0 +1,3 @@
+// Salin menjadi GoogleSignIn.xcconfig dan isi dari Google Cloud Console.
+GOOGLE_IOS_CLIENT_ID=ISI_DARI_GOOGLE_CLOUD
+GOOGLE_REVERSED_CLIENT_ID=ISI_DARI_GOOGLE_CLOUD

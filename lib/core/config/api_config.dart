@@ -3,7 +3,7 @@ class ApiConfig {
 
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://api-beans.wisataku.web.id',
+    defaultValue: 'http://203.145.35.191',
   );
 
   static const String predictEndpoint = '/predict';
@@ -28,11 +28,23 @@ class ApiConfig {
         '839421124204-mdivcajm03elc5o5m6k256k9gra6ie82.apps.googleusercontent.com',
   );
 
-  static Uri uri(String path) {
-    final normalizedBase = baseUrl.endsWith('/')
-        ? baseUrl.substring(0, baseUrl.length - 1)
-        : baseUrl;
+  static Uri uri(String path, [Map<String, dynamic>? queryParameters]) =>
+      buildUri(baseUrl, path, queryParameters);
+
+  static Uri buildUri(
+    String base,
+    String path, [
+    Map<String, dynamic>? queryParameters,
+  ]) {
+    final normalizedBase =
+        base.endsWith('/') ? base.substring(0, base.length - 1) : base;
     final normalizedPath = path.startsWith('/') ? path : '/$path';
-    return Uri.parse('$normalizedBase$normalizedPath');
+    final uri = Uri.parse('$normalizedBase$normalizedPath');
+    if (queryParameters == null || queryParameters.isEmpty) return uri;
+    return uri.replace(
+      queryParameters: queryParameters.map(
+        (key, value) => MapEntry(key, value.toString()),
+      ),
+    );
   }
 }

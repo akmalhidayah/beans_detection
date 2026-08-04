@@ -227,12 +227,10 @@ class LocalAuthService {
       throw const FormatException('Response server tidak valid.');
     }
     final root = Map<String, dynamic>.from(decoded);
-    final data = root['data'] is Map
-        ? Map<String, dynamic>.from(root['data'])
-        : root;
-    final userData = data['user'] is Map
-        ? Map<String, dynamic>.from(data['user'])
-        : data;
+    final data =
+        root['data'] is Map ? Map<String, dynamic>.from(root['data']) : root;
+    final userData =
+        data['user'] is Map ? Map<String, dynamic>.from(data['user']) : data;
     final updated = _user(userData, token);
     await _saveSession(_AuthSession(token, updated));
     return updated;
@@ -250,65 +248,34 @@ class LocalAuthService {
     String token = '',
   }) async {
     try {
+      final uri = ApiConfig.uri(path);
+      ApiResponseHandler.logRequest('POST', uri);
       final response = await _client
           .post(
-            ApiConfig.uri(path),
+            uri,
             headers: {
               'Content-Type': 'application/json',
+              'Accept': 'application/json',
               if (token.isNotEmpty) 'Authorization': 'Bearer $token',
             },
             body: jsonEncode(body),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 30));
+      ApiResponseHandler.logResponse(response);
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw _exceptionFor(response);
+        throw ApiResponseHandler.exception(response);
       }
       return response;
     } on ApiException {
       rethrow;
-    } on TimeoutException {
+    } on TimeoutException catch (error) {
+      ApiResponseHandler.logException(error);
+      throw const NetworkException(
+        'Waktu koneksi ke server habis. Silakan coba lagi.',
+      );
+    } on http.ClientException catch (error) {
+      ApiResponseHandler.logException(error);
       throw const NetworkException();
-    } on http.ClientException {
-      throw const NetworkException();
-    }
-  }
-
-  ApiException _exceptionFor(http.Response response) {
-    final message = parseFastApiMessage(response.body);
-    switch (response.statusCode) {
-      case 400:
-      case 401:
-        return AuthenticationException(
-          message.isEmpty ? 'Email atau password salah.' : message,
-          statusCode: response.statusCode,
-        );
-      case 403:
-        return AuthenticationException(
-          message.isEmpty ? 'Akun tidak aktif atau akses ditolak.' : message,
-          statusCode: 403,
-        );
-      case 422:
-        return ValidationException(
-          message.isEmpty ? 'Data yang dikirim tidak valid.' : message,
-        );
-      case 409:
-        return ValidationException(
-          message.isEmpty ? 'Email sudah digunakan akun lain.' : message,
-        );
-      case 429:
-        return const ApiException(
-          'Terlalu banyak percobaan. Silakan tunggu lalu coba lagi.',
-          statusCode: 429,
-        );
-      default:
-        return ApiException(
-          response.statusCode >= 500
-              ? 'Server sedang bermasalah. Silakan coba lagi nanti.'
-              : (message.isEmpty
-                  ? 'Permintaan tidak dapat diproses.'
-                  : message),
-          statusCode: response.statusCode,
-        );
     }
   }
 
@@ -372,21 +339,8 @@ class LocalAuthService {
     await p.remove(SecureSessionStorage.legacyTokenKey);
   }
 
-  static String parseFastApiMessage(String body) {
-    try {
-      final decoded = jsonDecode(body);
-      if (decoded is! Map) return '';
-      final detail = decoded['detail'] ?? decoded['message'];
-      if (detail is String) return detail;
-      if (detail is List) {
-        return detail.map((item) {
-          if (item is Map) return item['msg']?.toString() ?? item.toString();
-          return item.toString();
-        }).join('; ');
-      }
-    } catch (_) {}
-    return '';
-  }
+  static String parseFastApiMessage(String body) =>
+      ApiResponseHandler.message(body);
 
   static DateTime? _date(dynamic value) =>
       DateTime.tryParse(value?.toString() ?? '');

@@ -47,16 +47,37 @@ lib/
 
 # Production dan iOS
 
-API production aplikasi adalah `https://api-beans.wisataku.web.id`. Model YOLO tetap
-berada di server; aplikasi hanya mengirim gambar melalui HTTPS.
+API aplikasi adalah `http://203.145.35.191`. Nilai ini menjadi default tunggal di
+`ApiConfig`, tetapi tetap dapat diganti saat build dengan `--dart-define`.
 
 Jalankan development dengan konfigurasi environment:
 
 ```sh
 flutter run \
-  --dart-define=API_BASE_URL=https://api-beans.wisataku.web.id \
+  --dart-define=API_BASE_URL=http://203.145.35.191 \
   --dart-define=GOOGLE_SERVER_CLIENT_ID=ISI_SERVER_CLIENT_ID \
   --dart-define=GOOGLE_IOS_CLIENT_ID=ISI_IOS_CLIENT_ID
+```
+
+Flutter Web Chrome:
+
+```sh
+flutter run -d chrome --web-port=51039 \
+  --dart-define=API_BASE_URL=http://203.145.35.191
+```
+
+Flutter Web melalui web-server (buka URL-nya secara manual di Safari):
+
+```sh
+flutter run -d web-server --web-hostname=localhost --web-port=51039 \
+  --dart-define=API_BASE_URL=http://203.145.35.191
+```
+
+Android release:
+
+```sh
+flutter build apk --release \
+  --dart-define=API_BASE_URL=http://203.145.35.191
 ```
 
 Untuk iOS, buat OAuth Client bertipe iOS di Google Cloud dengan Bundle ID

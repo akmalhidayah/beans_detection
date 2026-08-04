@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../core/config/api_config.dart';
+import '../core/errors/app_exceptions.dart';
 import '../models/admin_user_model.dart';
 import 'local_auth_service.dart';
 
@@ -20,17 +21,19 @@ class AdminService {
     }
 
     try {
+      final uri = ApiConfig.uri(ApiConfig.adminUsersEndpoint);
+      ApiResponseHandler.logRequest('GET', uri);
       final response = await _client.get(
-        ApiConfig.uri(ApiConfig.adminUsersEndpoint),
-        headers: {'Authorization': 'Bearer $token'},
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
       ).timeout(const Duration(seconds: 12));
+      ApiResponseHandler.logResponse(response);
 
-      if (response.statusCode == 401 || response.statusCode == 403) {
-        throw Exception('Akses ditolak. Fitur ini hanya untuk admin.');
-      }
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(
-            _messageFromBody(response.body) ?? 'Gagal mengambil daftar user.');
+        throw ApiResponseHandler.exception(response);
       }
 
       final decoded = jsonDecode(response.body);
@@ -47,24 +50,18 @@ class AdminService {
             ),
           )
           .toList();
-    } on TimeoutException {
-      throw Exception('Tidak dapat terhubung ke server.');
-    } on http.ClientException {
-      throw Exception('Tidak dapat terhubung ke server.');
+    } on ApiException {
+      rethrow;
+    } on TimeoutException catch (error) {
+      ApiResponseHandler.logException(error);
+      throw const NetworkException(
+        'Waktu koneksi ke server habis. Silakan coba lagi.',
+      );
+    } on http.ClientException catch (error) {
+      ApiResponseHandler.logException(error);
+      throw const NetworkException();
     } on FormatException catch (error) {
       throw Exception(error.message);
     }
-  }
-
-  String? _messageFromBody(String body) {
-    try {
-      final decoded = jsonDecode(body);
-      if (decoded is Map<String, dynamic>) {
-        return decoded['message']?.toString() ?? decoded['detail']?.toString();
-      }
-    } catch (_) {
-      return null;
-    }
-    return null;
   }
 }

@@ -1,11 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../core/config/api_config.dart';
+import '../core/errors/app_exceptions.dart';
 import 'local_auth_service.dart';
 
 class ModelManagementService {
@@ -34,6 +33,7 @@ class ModelManagementService {
         'POST',
         ApiConfig.uri(ApiConfig.modelUploadEndpoint),
       );
+      ApiResponseHandler.logRequest('POST', request.url);
       request.headers['Authorization'] = 'Bearer $token';
 
       if (kIsWeb) {
@@ -60,33 +60,23 @@ class ModelManagementService {
             const Duration(minutes: 2),
           );
       final response = await http.Response.fromStream(streamedResponse);
-      if (response.statusCode == 401 || response.statusCode == 403) {
-        throw Exception(
-            'Akses ditolak. Hanya admin yang dapat mengunggah model.');
-      }
+      ApiResponseHandler.logResponse(response);
       if (response.statusCode == 413) {
         throw Exception('Ukuran file model terlalu besar.');
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(_messageFromBody(response.body) ??
-            'Upload model gagal (${response.statusCode}).');
+        throw ApiResponseHandler.exception(response);
       }
-    } on TimeoutException {
-      throw Exception('Upload model timeout. Coba ulangi beberapa saat lagi.');
-    } on http.ClientException {
-      throw Exception('Tidak dapat terhubung ke backend.');
+    } on ApiException {
+      rethrow;
+    } on TimeoutException catch (error) {
+      ApiResponseHandler.logException(error);
+      throw const NetworkException(
+        'Waktu koneksi ke server habis. Silakan coba lagi.',
+      );
+    } on http.ClientException catch (error) {
+      ApiResponseHandler.logException(error);
+      throw const NetworkException();
     }
-  }
-
-  String? _messageFromBody(String body) {
-    try {
-      final decoded = jsonDecode(body);
-      if (decoded is Map<String, dynamic>) {
-        return decoded['message']?.toString() ?? decoded['detail']?.toString();
-      }
-    } catch (_) {
-      return null;
-    }
-    return null;
   }
 }

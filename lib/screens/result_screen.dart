@@ -8,7 +8,6 @@ import '../core/utils/app_language.dart';
 import '../core/utils/date_formatter.dart';
 import '../core/utils/image_box_transform.dart';
 import '../core/widgets/coffee_placeholder.dart';
-import '../core/widgets/confidence_bar.dart';
 import '../core/widgets/empty_state.dart';
 import '../core/widgets/grade_badge.dart';
 import '../core/widgets/info_card.dart';
@@ -44,7 +43,6 @@ class _ResultScreenState extends State<ResultScreen> {
   @override
   Widget build(BuildContext context) {
     final currentResult = widget.result;
-    final gradeColor = GradeBadge.gradeColor(currentResult.grade);
     final isDetected = currentResult.isDetected;
 
     return Scaffold(
@@ -53,135 +51,81 @@ class _ResultScreenState extends State<ResultScreen> {
         title: Text(AppLanguage.text('classification_result', _language)),
       ),
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 430),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-              child: isDetected
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _BoundingBoxPreview(result: currentResult),
-                        const SizedBox(height: 22),
-                        _ResultSummary(result: currentResult),
-                        const SizedBox(height: 12),
-                        _CompositionCard(result: currentResult),
-                        const SizedBox(height: 10),
-                        Text(
-                          'Hasil hanya ditampilkan apabila tingkat keyakinan model minimal ${(currentResult.confidenceThreshold * 100).toStringAsFixed(0)}%.',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppColors.greyText,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                        ),
-                        const SizedBox(height: 22),
-                        ConfidenceBar(
-                          value: currentResult.confidencePercent,
-                          color: gradeColor,
-                        ),
-                        const SizedBox(height: 22),
-                        const SectionTitle(
-                          title: 'Karakteristik Umum Berdasarkan Grade',
-                        ),
-                        const SizedBox(height: 12),
-                        _CharacteristicCard(
-                          characteristics: currentResult.characteristics,
-                          note: currentResult.characteristicsNote,
-                        ),
-                        const SizedBox(height: 22),
-                        const SectionTitle(title: 'Deskripsi Hasil'),
-                        const SizedBox(height: 12),
-                        InfoCard(child: Text(currentResult.description)),
-                        const SizedBox(height: 18),
-                        const SectionTitle(title: 'Rekomendasi'),
-                        const SizedBox(height: 12),
-                        InfoCard(
-                          child: _RuleBasedText(
-                            text: currentResult.recommendation,
-                            note: currentResult.recommendationNote,
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        InfoCard(
-                          padding: const EdgeInsets.all(14),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.schedule_rounded,
-                                color: AppColors.primaryBrown,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  'Waktu deteksi: ${DateFormatter.format(currentResult.detectedAt)}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        SecondaryButton(
-                          label: AppLanguage.text('save_history', _language),
-                          icon: Icons.save_rounded,
-                          onPressed: _saveHistory,
-                        ),
-                        const SizedBox(height: 12),
-                        PrimaryButton(
-                          label: AppLanguage.text('detect_again', _language),
-                          icon: Icons.refresh_rounded,
-                          onPressed: () => Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const DetectionScreen(
-                                mode: DetectionMode.camera,
-                              ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isTablet = constraints.maxWidth >= 700;
+            final maxWidth = constraints.maxWidth >= 1100
+                ? 960.0
+                : isTablet
+                    ? 880.0
+                    : 560.0;
+            final horizontalPadding = isTablet ? 28.0 : 18.0;
+            return Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxWidth),
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    12,
+                    horizontalPadding,
+                    32,
+                  ),
+                  child: isDetected
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _BoundingBoxPreview(result: currentResult),
+                            const SizedBox(height: 20),
+                            _ResultSummary(result: currentResult),
+                            const SizedBox(height: 16),
+                            _CompositionCard(result: currentResult),
+                            const SizedBox(height: 24),
+                            _SectionHeading(
+                              title: 'Karakteristik Umum Berdasarkan Grade',
+                              onInfo: _showCharacteristicsInfo,
                             ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SecondaryButton(
-                          label: 'Kembali ke Beranda',
-                          icon: Icons.home_rounded,
-                          onPressed: () => Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const HomeScreen(),
+                            const SizedBox(height: 12),
+                            _CharacteristicCard(
+                              characteristics: currentResult.characteristics,
                             ),
-                            (route) => false,
-                          ),
-                        ),
-                      ],
-                    )
-                  : Column(
-                      children: [
-                        EmptyState(
-                          title: 'Tidak ada biji kopi terdeteksi.',
-                          message: currentResult.message.isNotEmpty
-                              ? currentResult.message
-                              : 'Silakan ambil gambar ulang dengan pencahayaan yang cukup dan objek biji kopi terlihat jelas.',
-                          icon: Icons.search_off_rounded,
-                        ),
-                        PrimaryButton(
-                          label: AppLanguage.text('detect_again', _language),
-                          icon: Icons.refresh_rounded,
-                          onPressed: () => Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const DetectionScreen(
-                                mode: DetectionMode.camera,
-                              ),
+                            const SizedBox(height: 18),
+                            _InformationResultTile(onTap: _showResultInfo),
+                            const SizedBox(height: 22),
+                            const SectionTitle(title: 'Rekomendasi'),
+                            const SizedBox(height: 12),
+                            _RecommendationCard(result: currentResult),
+                            const SizedBox(height: 16),
+                            _DetectionTime(result: currentResult),
+                            const SizedBox(height: 24),
+                            _ResponsiveResultActions(
+                              language: _language,
+                              onSave: _saveHistory,
+                              onDetectAgain: _detectAgain,
+                              onHome: _goHome,
                             ),
-                          ),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            EmptyState(
+                              title: 'Tidak ada biji kopi terdeteksi.',
+                              message: currentResult.message.isNotEmpty
+                                  ? currentResult.message
+                                  : 'Silakan ambil gambar ulang dengan pencahayaan yang cukup dan objek biji kopi terlihat jelas.',
+                              icon: Icons.search_off_rounded,
+                            ),
+                            PrimaryButton(
+                              label:
+                                  AppLanguage.text('detect_again', _language),
+                              icon: Icons.refresh_rounded,
+                              onPressed: _detectAgain,
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-            ),
-          ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -205,6 +149,70 @@ class _ResultScreenState extends State<ResultScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Hasil deteksi berhasil disimpan ke riwayat.'),
+      ),
+    );
+  }
+
+  void _detectAgain() => Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const DetectionScreen(mode: DetectionMode.camera),
+        ),
+      );
+
+  void _goHome() => Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
+
+  void _showCharacteristicsInfo() => showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Tentang Karakteristik'),
+          content: const Text(
+            'Karakteristik berikut merupakan gambaran umum sesuai grade hasil klasifikasi. Informasi ini bukan hasil pengukuran warna, ukuran, permukaan, atau keutuhan secara terpisah oleh model.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Tutup'),
+            ),
+          ],
+        ),
+      );
+
+  void _showResultInfo() {
+    final description = widget.result.description.trim();
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 4, 24, 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Cara Hasil Ditentukan',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                description.isNotEmpty && description != '-'
+                    ? description
+                    : 'Hasil klasifikasi keseluruhan ditentukan dari kelas dengan jumlah objek terdeteksi paling banyak. Nilai confidence merupakan rata-rata confidence objek pada kelas tersebut.',
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Hasil hanya ditampilkan apabila tingkat keyakinan model memenuhi batas minimum yang ditetapkan sistem.',
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -366,8 +374,6 @@ class _ResultSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDetected = result.isDetected;
-
     return InfoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -376,52 +382,41 @@ class _ResultSummary extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  isDetected
-                      ? 'Kelas dominan: ${result.summary.dominantClass}'
-                      : result.status,
+                  result.className,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         color: AppColors.darkText,
                         fontWeight: FontWeight.w900,
                       ),
                 ),
               ),
-              if (isDetected) GradeBadge(grade: result.grade),
+              GradeBadge(grade: result.grade),
             ],
           ),
-          const SizedBox(height: 14),
-          _ResultRow(
-            label: 'Jenis kopi dominan',
-            value: result.summary.dominantCoffeeType,
-          ),
-          _ResultRow(
-            label: 'Grade dominan',
-            value: result.summary.dominantGrade,
-          ),
-          _ResultRow(
-            label: 'Confidence rata-rata kelas dominan',
-            value: _percentRatio(result.summary.dominantAverageConfidence),
-          ),
-          _ResultRow(
-            label: 'Objek terdeteksi',
-            value: result.totalDetected.toString(),
-          ),
-          _ResultRow(
-            label: 'Persentase kelas dominan',
-            value: '${result.summary.dominantPercentage.toStringAsFixed(1)}%',
-          ),
-          _ResultRow(
-            label: 'Persentase Grade C',
-            value: '${result.summary.lowQualityPercentage.toStringAsFixed(1)}%',
-          ),
-          _ResultRow(
-            label: 'Perlu sortasi (Grade B + C)',
-            value:
-                '${result.summary.sortingRequiredPercentage.toStringAsFixed(1)}%',
-          ),
-          _ResultRow(
-            label: 'Status kualitas',
-            value: result.status,
-            isLast: true,
+          const SizedBox(height: 18),
+          _ResultMetricGrid(
+            metrics: [
+              _ResultMetric(
+                icon: Icons.shield_outlined,
+                label: 'Confidence',
+                value: result.confidenceText,
+              ),
+              _ResultMetric(
+                icon: Icons.center_focus_strong_rounded,
+                label: 'Objek terdeteksi',
+                value: result.totalDetected.toString(),
+              ),
+              _ResultMetric(
+                icon: Icons.filter_alt_outlined,
+                label: 'Perlu disortasi',
+                value:
+                    '${result.summary.sortingRequiredPercentage.toStringAsFixed(1)}%',
+              ),
+              _ResultMetric(
+                icon: Icons.workspace_premium_outlined,
+                label: 'Status kualitas',
+                value: result.status,
+              ),
+            ],
           ),
         ],
       ),
@@ -429,88 +424,93 @@ class _ResultSummary extends StatelessWidget {
   }
 }
 
-// ignore: unused_element, retained for compatibility with the alternate result UI.
-class _NotDetectedWarning extends StatelessWidget {
-  const _NotDetectedWarning();
-
-  @override
-  Widget build(BuildContext context) {
-    return InfoCard(
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(
-            Icons.warning_amber_rounded,
-            color: AppColors.redAccent,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Objek biji kopi tidak terdeteksi',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.darkText,
-                    fontWeight: FontWeight.w900,
-                  ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ResultRow extends StatelessWidget {
-  const _ResultRow({
+class _ResultMetric {
+  const _ResultMetric({
+    required this.icon,
     required this.label,
     required this.value,
-    this.isLast = false,
   });
 
+  final IconData icon;
   final String label;
   final String value;
-  final bool isLast;
+}
+
+class _ResultMetricGrid extends StatelessWidget {
+  const _ResultMetricGrid({required this.metrics});
+
+  final List<_ResultMetric> metrics;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.greyText,
-                    fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 460 ? 2 : 1;
+          final itemWidth = columns == 2
+              ? (constraints.maxWidth - 12) / 2
+              : constraints.maxWidth;
+          return Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final metric in metrics)
+                SizedBox(
+                  width: itemWidth,
+                  child: _ResultMetricItem(metric: metric),
+                ),
+            ],
+          );
+        },
+      );
+}
+
+class _ResultMetricItem extends StatelessWidget {
+  const _ResultMetricItem({required this.metric});
+
+  final _ResultMetric metric;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.line),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(metric.icon, size: 21, color: AppColors.primaryBrown),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    metric.label,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: AppColors.greyText),
                   ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.darkText,
-                    fontWeight: FontWeight.w900,
+                  const SizedBox(height: 4),
+                  Text(
+                    metric.value,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: AppColors.darkText,
+                          fontWeight: FontWeight.w900,
+                        ),
                   ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
+          ],
+        ),
+      );
 }
 
 class _CharacteristicCard extends StatelessWidget {
-  const _CharacteristicCard({
-    required this.characteristics,
-    required this.note,
-  });
+  const _CharacteristicCard({required this.characteristics});
 
   final Map<String, String> characteristics;
-  final String note;
 
   @override
   Widget build(BuildContext context) {
@@ -519,21 +519,12 @@ class _CharacteristicCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (note.isNotEmpty) ...[
-            Text(
-              note,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: AppColors.greyText),
-            ),
-            const SizedBox(height: 14),
-          ],
           for (var i = 0; i < entries.length; i++)
             Padding(
               padding:
                   EdgeInsets.only(bottom: i == entries.length - 1 ? 0 : 12),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Icon(
                     Icons.check_circle_rounded,
@@ -543,7 +534,7 @@ class _CharacteristicCard extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      entries[i].key,
+                      _formatCharacteristicKey(entries[i].key),
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: AppColors.greyText,
                             fontWeight: FontWeight.w700,
@@ -551,7 +542,8 @@ class _CharacteristicCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Flexible(
+                  Expanded(
+                    flex: 2,
                     child: Text(
                       entries[i].value,
                       textAlign: TextAlign.end,
@@ -592,44 +584,274 @@ class _CompositionCard extends StatelessWidget {
                 ?.copyWith(fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 12),
-          for (var i = 0; i < entries.length; i++)
-            _ResultRow(
-              label: entries[i].key,
-              value: '${entries[i].value} objek',
-              isLast: i == entries.length - 1,
+          for (var i = 0; i < entries.length; i++) ...[
+            _CompositionItem(
+              className: entries[i].key,
+              count: entries[i].value,
+              total: result.summary.total,
             ),
+            if (i != entries.length - 1) const SizedBox(height: 14),
+          ],
         ],
       ),
     );
   }
 }
 
-class _RuleBasedText extends StatelessWidget {
-  const _RuleBasedText({required this.text, required this.note});
+class _CompositionItem extends StatelessWidget {
+  const _CompositionItem({
+    required this.className,
+    required this.count,
+    required this.total,
+  });
 
-  final String text;
-  final String note;
+  final String className;
+  final int count;
+  final int total;
 
   @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(text),
-          if (note.isNotEmpty) ...[
-            const SizedBox(height: 10),
+  Widget build(BuildContext context) {
+    final percentage = total == 0 ? 0.0 : count / total * 100;
+    final grade = className.contains('Grade A')
+        ? 'Grade A'
+        : className.contains('Grade B')
+            ? 'Grade B'
+            : 'Grade C';
+    final color = GradeBadge.gradeColor(grade);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                className,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text('$count objek',
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(width: 12),
             Text(
-              note,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: AppColors.greyText),
+              '${percentage.toStringAsFixed(1)}%',
+              style: const TextStyle(fontWeight: FontWeight.w900),
             ),
           ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(99),
+          child: LinearProgressIndicator(
+            minHeight: 6,
+            value: (percentage / 100).clamp(0, 1),
+            color: color,
+            backgroundColor: AppColors.line,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading({required this.title, required this.onInfo});
+
+  final String title;
+  final VoidCallback onInfo;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: AppColors.darkText,
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Informasi karakteristik',
+            onPressed: onInfo,
+            icon: const Icon(Icons.info_outline_rounded),
+            color: AppColors.primaryBrown,
+          ),
         ],
       );
 }
 
-String _percentRatio(double value) {
-  final percent = value <= 1 ? value * 100 : value;
-  return '${percent.toStringAsFixed(1)}%';
+class _InformationResultTile extends StatelessWidget {
+  const _InformationResultTile({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        margin: EdgeInsets.zero,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline_rounded, color: AppColors.primaryBrown),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Informasi hasil',
+                          style: TextStyle(fontWeight: FontWeight.w900)),
+                      SizedBox(height: 2),
+                      Text(
+                        'Cara penentuan hasil klasifikasi',
+                        style: TextStyle(color: AppColors.greyText),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: AppColors.greyText),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
+class _RecommendationCard extends StatelessWidget {
+  const _RecommendationCard({required this.result});
+
+  final DetectionResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = GradeBadge.gradeColor(result.grade);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            result.recommendation,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: AppColors.darkText,
+                  fontWeight: FontWeight.w900,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Rekomendasi dibuat oleh aturan sistem berdasarkan hasil klasifikasi.',
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: AppColors.greyText),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetectionTime extends StatelessWidget {
+  const _DetectionTime({required this.result});
+
+  final DetectionResult result;
+
+  @override
+  Widget build(BuildContext context) => InfoCard(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            const Icon(Icons.schedule_rounded, color: AppColors.primaryBrown),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Waktu deteksi: ${DateFormatter.format(result.detectedAt)}',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _ResponsiveResultActions extends StatelessWidget {
+  const _ResponsiveResultActions({
+    required this.language,
+    required this.onSave,
+    required this.onDetectAgain,
+    required this.onHome,
+  });
+
+  final String language;
+  final VoidCallback onSave;
+  final VoidCallback onDetectAgain;
+  final VoidCallback onHome;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 720;
+          final buttons = [
+            SecondaryButton(
+              label: AppLanguage.text('save_history', language),
+              icon: Icons.save_rounded,
+              onPressed: onSave,
+            ),
+            PrimaryButton(
+              label: AppLanguage.text('detect_again', language),
+              icon: Icons.refresh_rounded,
+              onPressed: onDetectAgain,
+            ),
+            SecondaryButton(
+              label: 'Kembali ke Beranda',
+              icon: Icons.home_rounded,
+              onPressed: onHome,
+            ),
+          ];
+          if (wide) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < buttons.length; i++) ...[
+                  Expanded(child: buttons[i]),
+                  if (i != buttons.length - 1) const SizedBox(width: 12),
+                ],
+              ],
+            );
+          }
+          return Column(
+            children: [
+              for (var i = 0; i < buttons.length; i++) ...[
+                buttons[i],
+                if (i != buttons.length - 1) const SizedBox(height: 12),
+              ],
+            ],
+          );
+        },
+      );
+}
+
+String _formatCharacteristicKey(String key) {
+  if (key == 'bentuk_keutuhan') return 'Bentuk & Keutuhan';
+  final words = key.replaceAll('_', ' ').trim().split(RegExp(r'\s+'));
+  return words
+      .where((word) => word.isNotEmpty)
+      .map((word) => '${word[0].toUpperCase()}${word.substring(1)}')
+      .join(' ');
 }

@@ -16,8 +16,12 @@ class DetectionSummary {
   });
 
   static const classNames = <String>[
-    'Arabica Grade A', 'Arabica Grade B', 'Arabica Grade C',
-    'Robusta Grade A', 'Robusta Grade B', 'Robusta Grade C',
+    'Arabica Grade A',
+    'Arabica Grade B',
+    'Arabica Grade C',
+    'Robusta Grade A',
+    'Robusta Grade B',
+    'Robusta Grade C',
   ];
   static const gradeNames = <String>['Grade A', 'Grade B', 'Grade C'];
   static const coffeeTypes = <String>['Arabica', 'Robusta'];
@@ -41,32 +45,44 @@ class DetectionSummary {
         classCounts: {for (final name in classNames) name: 0},
         gradeCounts: {for (final name in gradeNames) name: 0},
         coffeeTypeCounts: {for (final name in coffeeTypes) name: 0},
-        dominantClass: '-', dominantCoffeeType: '-', dominantGrade: '-',
-        dominantCount: 0, dominantPercentage: 0,
-        dominantAverageConfidence: 0, averageConfidence: 0,
-        lowQualityPercentage: 0, sortingRequiredPercentage: 0,
+        dominantClass: '-',
+        dominantCoffeeType: '-',
+        dominantGrade: '-',
+        dominantCount: 0,
+        dominantPercentage: 0,
+        dominantAverageConfidence: 0,
+        averageConfidence: 0,
+        lowQualityPercentage: 0,
+        sortingRequiredPercentage: 0,
       );
 
   factory DetectionSummary.fromJson(Map<String, dynamic> json) {
     final empty = DetectionSummary.empty();
     return DetectionSummary(
       total: _int(json['total']),
-      classCounts: _countMap(json['class_counts'] ?? json['classCounts'], empty.classCounts),
-      gradeCounts: _countMap(json['grade_counts'] ?? json['gradeCounts'], empty.gradeCounts),
+      classCounts: _countMap(
+          json['class_counts'] ?? json['classCounts'], empty.classCounts),
+      gradeCounts: _countMap(
+          json['grade_counts'] ?? json['gradeCounts'], empty.gradeCounts),
       coffeeTypeCounts: _countMap(
-        json['coffee_type_counts'] ?? json['coffeeTypeCounts'], empty.coffeeTypeCounts,
+        json['coffee_type_counts'] ?? json['coffeeTypeCounts'],
+        empty.coffeeTypeCounts,
       ),
-      dominantClass: _text(json['dominant_class'] ?? json['dominantClass'], '-'),
+      dominantClass:
+          _text(json['dominant_class'] ?? json['dominantClass'], '-'),
       dominantCoffeeType: _text(
-        json['dominant_coffee_type'] ?? json['dominantCoffeeType'], '-',
+        json['dominant_coffee_type'] ?? json['dominantCoffeeType'],
+        '-',
       ),
-      dominantGrade: _text(json['dominant_grade'] ?? json['dominantGrade'], '-'),
+      dominantGrade:
+          _text(json['dominant_grade'] ?? json['dominantGrade'], '-'),
       dominantCount: _int(json['dominant_count'] ?? json['dominantCount']),
       dominantPercentage: _double(
         json['dominant_percentage'] ?? json['dominantPercentage'],
       ),
       dominantAverageConfidence: _double(
-        json['dominant_average_confidence'] ?? json['dominantAverageConfidence'],
+        json['dominant_average_confidence'] ??
+            json['dominantAverageConfidence'],
       ),
       averageConfidence: _double(
         json['average_confidence'] ?? json['averageConfidence'],
@@ -75,7 +91,8 @@ class DetectionSummary {
         json['low_quality_percentage'] ?? json['lowQualityPercentage'],
       ),
       sortingRequiredPercentage: _double(
-        json['sorting_required_percentage'] ?? json['sortingRequiredPercentage'],
+        json['sorting_required_percentage'] ??
+            json['sortingRequiredPercentage'],
       ),
     );
   }
@@ -96,12 +113,18 @@ class DetectionSummary {
       final detectedClass = detection['class_name']?.toString() ?? '';
       final detectedGrade = detection['grade']?.toString() ?? '';
       final detectedType = detection['coffee_type']?.toString() ?? '';
-      if (classCounts.containsKey(detectedClass)) classCounts[detectedClass] = classCounts[detectedClass]! + 1;
+      if (classCounts.containsKey(detectedClass)) {
+        classCounts[detectedClass] = classCounts[detectedClass]! + 1;
+      }
       if (confidences.containsKey(detectedClass)) {
         confidences[detectedClass]!.add(_double(detection['confidence']));
       }
-      if (gradeCounts.containsKey(detectedGrade)) gradeCounts[detectedGrade] = gradeCounts[detectedGrade]! + 1;
-      if (typeCounts.containsKey(detectedType)) typeCounts[detectedType] = typeCounts[detectedType]! + 1;
+      if (gradeCounts.containsKey(detectedGrade)) {
+        gradeCounts[detectedGrade] = gradeCounts[detectedGrade]! + 1;
+      }
+      if (typeCounts.containsKey(detectedType)) {
+        typeCounts[detectedType] = typeCounts[detectedType]! + 1;
+      }
     }
     final total = detections.isNotEmpty ? detections.length : totalDetected;
     if (detections.isEmpty && total > 0) {
@@ -127,17 +150,22 @@ class DetectionSummary {
     final selectedDetections = detections.where(
       (item) => item['class_name']?.toString() == selectedClass,
     );
-    final selectedSample = selectedDetections.isEmpty ? null : selectedDetections.first;
+    final selectedSample =
+        selectedDetections.isEmpty ? null : selectedDetections.first;
     final selectedType = selectedSample?['coffee_type']?.toString() ??
         (selectedClass.startsWith('Arabica')
             ? 'Arabica'
-            : selectedClass.startsWith('Robusta') ? 'Robusta' : coffeeType);
+            : selectedClass.startsWith('Robusta')
+                ? 'Robusta'
+                : coffeeType);
     final selectedGrade = selectedSample?['grade']?.toString() ??
         (selectedClass.endsWith('Grade A')
             ? 'Grade A'
             : selectedClass.endsWith('Grade B')
                 ? 'Grade B'
-                : selectedClass.endsWith('Grade C') ? 'Grade C' : grade);
+                : selectedClass.endsWith('Grade C')
+                    ? 'Grade C'
+                    : grade);
     final selectedConfidenceTotal = confidences[selectedClass]
             ?.fold<double>(0, (sum, value) => sum + value) ??
         0;
@@ -148,7 +176,9 @@ class DetectionSummary {
         ? (confidence > 1 ? confidence / 100 : confidence)
         : selectedConfidenceTotal / dominantCount;
     return DetectionSummary(
-      total: total, classCounts: classCounts, gradeCounts: gradeCounts,
+      total: total,
+      classCounts: classCounts,
+      gradeCounts: gradeCounts,
       coffeeTypeCounts: typeCounts,
       dominantClass: total > 0 ? selectedClass : '-',
       dominantCoffeeType: total > 0 ? selectedType : '-',
@@ -159,18 +189,26 @@ class DetectionSummary {
       averageConfidence: detections.isEmpty
           ? (confidence > 1 ? confidence / 100 : confidence)
           : allConfidence / detections.length,
-      lowQualityPercentage: total == 0 ? 0 : (gradeCounts['Grade C'] ?? 0) / total * 100,
+      lowQualityPercentage:
+          total == 0 ? 0 : (gradeCounts['Grade C'] ?? 0) / total * 100,
       sortingRequiredPercentage: total == 0
           ? 0
-          : ((gradeCounts['Grade B'] ?? 0) + (gradeCounts['Grade C'] ?? 0)) / total * 100,
+          : ((gradeCounts['Grade B'] ?? 0) + (gradeCounts['Grade C'] ?? 0)) /
+              total *
+              100,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'total': total, 'class_counts': classCounts, 'grade_counts': gradeCounts,
-        'coffee_type_counts': coffeeTypeCounts, 'dominant_class': dominantClass,
-        'dominant_coffee_type': dominantCoffeeType, 'dominant_grade': dominantGrade,
-        'dominant_count': dominantCount, 'dominant_percentage': dominantPercentage,
+        'total': total,
+        'class_counts': classCounts,
+        'grade_counts': gradeCounts,
+        'coffee_type_counts': coffeeTypeCounts,
+        'dominant_class': dominantClass,
+        'dominant_coffee_type': dominantCoffeeType,
+        'dominant_grade': dominantGrade,
+        'dominant_count': dominantCount,
+        'dominant_percentage': dominantPercentage,
         'dominant_average_confidence': dominantAverageConfidence,
         'average_confidence': averageConfidence,
         'low_quality_percentage': lowQualityPercentage,
@@ -189,9 +227,8 @@ class DetectionSummary {
     return result;
   }
 
-  static int _int(dynamic value) => value is num
-      ? value.toInt()
-      : int.tryParse(value?.toString() ?? '') ?? 0;
+  static int _int(dynamic value) =>
+      value is num ? value.toInt() : int.tryParse(value?.toString() ?? '') ?? 0;
   static double _double(dynamic value) => value is num
       ? value.toDouble()
       : double.tryParse(value?.toString() ?? '') ?? 0;

@@ -26,8 +26,16 @@ void main() {
   test('builds fallback composition from legacy detections', () {
     final summary = DetectionSummary.fromLegacy(
       detections: [
-        {'class_name': 'Robusta Grade C', 'coffee_type': 'Robusta', 'grade': 'Grade C'},
-        {'class_name': 'Robusta Grade C', 'coffee_type': 'Robusta', 'grade': 'Grade C'},
+        {
+          'class_name': 'Robusta Grade C',
+          'coffee_type': 'Robusta',
+          'grade': 'Grade C'
+        },
+        {
+          'class_name': 'Robusta Grade C',
+          'coffee_type': 'Robusta',
+          'grade': 'Grade C'
+        },
       ],
       className: 'Robusta Grade C',
       coffeeType: 'Robusta',

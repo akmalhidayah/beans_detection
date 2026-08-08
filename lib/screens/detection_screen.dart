@@ -127,10 +127,9 @@ class _DetectionScreenState extends State<DetectionScreen> {
     try {
       final pickedImage = await _imagePicker.pickImage(
         source: _isCameraMode ? ImageSource.camera : ImageSource.gallery,
-        imageQuality: 84,
-        maxWidth: 1600,
-        maxHeight: 1600,
       );
+      // Jangan menggunakan imageQuality/maxWidth/maxHeight.
+      // Detail warna dan tekstur biji diperlukan untuk klasifikasi grade.
 
       if (pickedImage == null) return;
 
@@ -161,6 +160,7 @@ class _DetectionScreenState extends State<DetectionScreen> {
       result = await _apiService.predictImage(
         selectedImage,
         authToken: token,
+        sourceType: _isCameraMode ? 'camera' : 'gallery',
       );
     } catch (exception) {
       if (mounted) {
@@ -311,7 +311,7 @@ class _SelectedImageView extends StatelessWidget {
 
           return Image.memory(
             bytes,
-            fit: BoxFit.cover,
+            fit: BoxFit.contain,
             width: double.infinity,
           );
         },
@@ -320,7 +320,7 @@ class _SelectedImageView extends StatelessWidget {
 
     return Image.file(
       File(image.path),
-      fit: BoxFit.cover,
+      fit: BoxFit.contain,
       width: double.infinity,
     );
   }
@@ -333,14 +333,23 @@ class _AnalysisParameterPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return const InfoCard(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _ParameterRow(label: 'Metode', value: 'YOLOv11'),
-          _ParameterRow(label: 'Input', value: 'Citra Digital'),
-          _ParameterRow(label: 'Objek', value: 'Biji Kopi'),
-          _ParameterRow(label: 'Jenis Kopi', value: 'Arabika / Robusta'),
-          _ParameterRow(
-            label: 'Kelas Output',
-            value: 'Grade A, Grade B, Grade C',
+          _GuideRow(text: 'Gunakan latar polos dan tidak bermotif.'),
+          _GuideRow(text: 'Hindari memegang biji di atas telapak tangan.'),
+          _GuideRow(
+            text: 'Gunakan cahaya yang merata, tidak terlalu gelap atau silau.',
+          ),
+          _GuideRow(text: 'Pastikan kamera fokus dan gambar tidak buram.'),
+          _GuideRow(text: 'Jangan menumpuk biji.'),
+          _GuideRow(
+            text: 'Pastikan biji memenuhi area foto dan tidak terlalu jauh.',
+          ),
+          _GuideRow(
+            text: 'Untuk satu biji, letakkan biji di bagian tengah.',
+          ),
+          _GuideRow(
+            text: 'Untuk banyak biji, beri sedikit jarak antarbiji.',
             isLast: true,
           ),
         ],
@@ -349,15 +358,13 @@ class _AnalysisParameterPanel extends StatelessWidget {
   }
 }
 
-class _ParameterRow extends StatelessWidget {
-  const _ParameterRow({
-    required this.label,
-    required this.value,
+class _GuideRow extends StatelessWidget {
+  const _GuideRow({
+    required this.text,
     this.isLast = false,
   });
 
-  final String label;
-  final String value;
+  final String text;
   final bool isLast;
 
   @override
@@ -367,23 +374,21 @@ class _ParameterRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.greyText,
-                    fontWeight: FontWeight.w700,
-                  ),
+          const Padding(
+            padding: EdgeInsets.only(top: 3),
+            child: Icon(
+              Icons.check_circle_outline_rounded,
+              size: 18,
+              color: AppColors.primaryBrown,
             ),
           ),
-          const SizedBox(width: 12),
-          Flexible(
+          const SizedBox(width: 10),
+          Expanded(
             child: Text(
-              value,
-              textAlign: TextAlign.end,
+              text,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: AppColors.darkText,
-                    fontWeight: FontWeight.w900,
+                    height: 1.35,
                   ),
             ),
           ),

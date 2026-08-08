@@ -32,6 +32,8 @@ class DetectionResult {
     this.recommendationSource = '',
     this.recommendationNote = '',
     this.aggregationMethod = '',
+    this.inputInfo = const {},
+    this.inferenceParameters = const {},
   })  : className = className ?? _buildClassName(coffeeType, grade),
         confidencePercent = confidencePercent ?? _normalizePercent(confidence),
         summary = summary ?? DetectionSummary.empty();
@@ -62,6 +64,8 @@ class DetectionResult {
   final String recommendationSource;
   final String recommendationNote;
   final String aggregationMethod;
+  final Map<String, dynamic> inputInfo;
+  final Map<String, dynamic> inferenceParameters;
 
   String get confidenceText => '${confidencePercent.toStringAsFixed(1)}%';
 
@@ -98,12 +102,13 @@ class DetectionResult {
         : data['summary'] is Map
             ? Map<String, dynamic>.from(data['summary'])
             : null;
-    final parsedSummary = summaryJson == null
-        ? null
-        : DetectionSummary.fromJson(summaryJson);
+    final parsedSummary =
+        summaryJson == null ? null : DetectionSummary.fromJson(summaryJson);
     final className = api['class_name']?.toString() ??
         api['label']?.toString() ??
-        (parsedSummary?.dominantClass != '-' ? parsedSummary?.dominantClass : null) ??
+        (parsedSummary?.dominantClass != '-'
+            ? parsedSummary?.dominantClass
+            : null) ??
         firstDetection?['class_name']?.toString() ??
         firstDetection?['label']?.toString() ??
         (responseStatus == 'detected' ? '' : 'Tidak Terdeteksi');
@@ -116,11 +121,14 @@ class DetectionResult {
         firstDetection?['jenis_kopi']?.toString() ??
         '-';
     final grade = api['grade']?.toString() ??
-        (parsedSummary?.dominantGrade != '-' ? parsedSummary?.dominantGrade : null) ??
+        (parsedSummary?.dominantGrade != '-'
+            ? parsedSummary?.dominantGrade
+            : null) ??
         firstDetection?['grade']?.toString() ??
         '-';
     final confidence = _toDouble(api['confidence'] ??
-        parsedSummary?.dominantAverageConfidence ?? firstDetection?['confidence']);
+        parsedSummary?.dominantAverageConfidence ??
+        firstDetection?['confidence']);
     final dataBoxes = data['bounding_boxes'] ?? data['boundingBoxes'];
     final rootBoxes = json['bounding_boxes'] ?? json['boundingBoxes'];
     final boxesJson = dataBoxes is List && dataBoxes.isNotEmpty
@@ -136,14 +144,15 @@ class DetectionResult {
       api['total_detected'] ?? api['totalDetected'],
       fallback: detections.isNotEmpty ? detections.length : boxes.length,
     );
-    final summary = parsedSummary ?? DetectionSummary.fromLegacy(
-      detections: detections,
-      className: className,
-      coffeeType: coffeeType,
-      grade: grade,
-      totalDetected: totalDetected,
-      confidence: confidence,
-    );
+    final summary = parsedSummary ??
+        DetectionSummary.fromLegacy(
+          detections: detections,
+          className: className,
+          coffeeType: coffeeType,
+          grade: grade,
+          totalDetected: totalDetected,
+          confidence: confidence,
+        );
 
     return DetectionResult(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -192,6 +201,8 @@ class DetectionResult {
       recommendationSource: api['recommendation_source']?.toString() ?? '',
       recommendationNote: api['recommendation_note']?.toString() ?? '',
       aggregationMethod: api['aggregation_method']?.toString() ?? '',
+      inputInfo: _parseDynamicMap(api['input_info']),
+      inferenceParameters: _parseDynamicMap(api['inference_parameters']),
     );
   }
 
@@ -235,12 +246,15 @@ class DetectionResult {
       confidenceThreshold: _toDouble(json['confidenceThreshold'] ?? 0.5),
       detections: _parseDetectionMaps(json['detections']),
       summary: json['summary'] is Map
-          ? DetectionSummary.fromJson(Map<String, dynamic>.from(json['summary']))
+          ? DetectionSummary.fromJson(
+              Map<String, dynamic>.from(json['summary']))
           : DetectionSummary.fromLegacy(
               detections: _parseDetectionMaps(json['detections']),
-              className: className ?? _buildClassName(
-                json['coffeeType']?.toString() ?? '-', grade,
-              ),
+              className: className ??
+                  _buildClassName(
+                    json['coffeeType']?.toString() ?? '-',
+                    grade,
+                  ),
               coffeeType: json['coffeeType']?.toString() ?? '-',
               grade: grade,
               totalDetected: _toInt(json['totalDetected']),
@@ -251,6 +265,10 @@ class DetectionResult {
       recommendationSource: json['recommendationSource']?.toString() ?? '',
       recommendationNote: json['recommendationNote']?.toString() ?? '',
       aggregationMethod: json['aggregationMethod']?.toString() ?? '',
+      inputInfo: _parseDynamicMap(json['inputInfo'] ?? json['input_info']),
+      inferenceParameters: _parseDynamicMap(
+        json['inferenceParameters'] ?? json['inference_parameters'],
+      ),
     );
   }
 
@@ -282,6 +300,8 @@ class DetectionResult {
       'recommendationSource': recommendationSource,
       'recommendationNote': recommendationNote,
       'aggregationMethod': aggregationMethod,
+      'inputInfo': inputInfo,
+      'inferenceParameters': inferenceParameters,
     };
   }
 
@@ -313,6 +333,8 @@ class DetectionResult {
       recommendationSource: recommendationSource,
       recommendationNote: recommendationNote,
       aggregationMethod: aggregationMethod,
+      inputInfo: inputInfo,
+      inferenceParameters: inferenceParameters,
     );
   }
 
@@ -377,6 +399,13 @@ class DetectionResult {
       for (final entry in value.entries)
         entry.key.toString(): entry.value.toString(),
     };
+  }
+
+  static Map<String, dynamic> _parseDynamicMap(dynamic value) {
+    if (value is! Map) return const {};
+    return Map<String, dynamic>.unmodifiable(
+      value.map((key, item) => MapEntry(key.toString(), item)),
+    );
   }
 
   static List<Map<String, dynamic>> _parseDetectionMaps(dynamic value) {

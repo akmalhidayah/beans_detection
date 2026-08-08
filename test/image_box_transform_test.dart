@@ -6,15 +6,18 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('calculates landscape, portrait, and square destinations', () {
     expect(
-      containedImageRect(imageSize: const Size(1000, 500), viewportSize: const Size(400, 400)),
+      containedImageRect(
+          imageSize: const Size(1000, 500), viewportSize: const Size(400, 400)),
       const Rect.fromLTWH(0, 100, 400, 200),
     );
     expect(
-      containedImageRect(imageSize: const Size(500, 1000), viewportSize: const Size(400, 400)),
+      containedImageRect(
+          imageSize: const Size(500, 1000), viewportSize: const Size(400, 400)),
       const Rect.fromLTWH(100, 0, 200, 400),
     );
     expect(
-      containedImageRect(imageSize: const Size(500, 500), viewportSize: const Size(400, 400)),
+      containedImageRect(
+          imageSize: const Size(500, 500), viewportSize: const Size(400, 400)),
       const Rect.fromLTWH(0, 0, 400, 400),
     );
   });

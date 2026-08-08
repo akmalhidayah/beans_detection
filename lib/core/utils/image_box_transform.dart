@@ -5,7 +5,8 @@ import '../../models/bounding_box.dart';
 Rect containedImageRect({required Size imageSize, required Size viewportSize}) {
   if (imageSize.isEmpty || viewportSize.isEmpty) return Rect.zero;
   final fitted = applyBoxFit(BoxFit.contain, imageSize, viewportSize);
-  return Alignment.center.inscribe(fitted.destination, Offset.zero & viewportSize);
+  return Alignment.center
+      .inscribe(fitted.destination, Offset.zero & viewportSize);
 }
 
 Rect boundingBoxRect(BoundingBox box, Rect imageRect) => Rect.fromLTWH(

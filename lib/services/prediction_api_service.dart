@@ -9,39 +9,55 @@ import 'package:image_picker/image_picker.dart';
 import '../core/config/api_config.dart';
 import '../core/errors/app_exceptions.dart';
 import '../models/detection_result.dart';
-import 'image_preparation_service.dart';
 
 class PredictionApiService {
-  PredictionApiService(
-      {http.Client? client, ImagePreparationService? preparation})
-      : _client = client ?? http.Client(),
-        _preparation = preparation ?? ImagePreparationService();
-  final http.Client _client;
-  final ImagePreparationService _preparation;
+  PredictionApiService({
+    http.Client? client,
+    @visibleForTesting bool? useWebBytes,
+  })  : _client = client ?? http.Client(),
+        _useWebBytes = useWebBytes ?? kIsWeb;
 
-  Future<DetectionResult> predictImage(XFile source,
-      {String authToken = ''}) async {
+  static const int maxImageSizeMb = 20;
+  static const int maxImageSizeBytes = maxImageSizeMb * 1024 * 1024;
+
+  final http.Client _client;
+  final bool _useWebBytes;
+
+  Future<DetectionResult> predictImage(
+    XFile source, {
+    String authToken = '',
+    String sourceType = '',
+  }) async {
     try {
-      final prepared = await _preparation.prepare(source);
+      final mimeType = _mimeType(source.name);
+      final imageBytes = _useWebBytes ? await source.readAsBytes() : null;
+      final sizeBytes = imageBytes?.length ?? await source.length();
+      validateImageSize(sizeBytes);
       final request = http.MultipartRequest(
           'POST', ApiConfig.uri(ApiConfig.predictEndpoint));
       ApiResponseHandler.logRequest('POST', request.url);
+      if (kDebugMode) {
+        debugPrint(
+          '[PREDICTION] file=${source.name} mime=$mimeType bytes=$sizeBytes '
+          'source=${sourceType.isEmpty ? 'unknown' : sourceType} endpoint=${request.url}',
+        );
+      }
       if (authToken.trim().isNotEmpty) {
         request.headers['Authorization'] = 'Bearer ${authToken.trim()}';
       }
-      final type = prepared.mimeType.split('/');
-      if (kIsWeb) {
+      final type = mimeType.split('/');
+      if (_useWebBytes) {
         request.files.add(http.MultipartFile.fromBytes(
           'file',
-          prepared.bytes!,
-          filename: prepared.file.name,
+          imageBytes!,
+          filename: source.name,
           contentType: MediaType(type[0], type[1]),
         ));
       } else {
         request.files.add(await http.MultipartFile.fromPath(
           'file',
-          prepared.file.path,
-          filename: prepared.file.name,
+          source.path,
+          filename: source.name,
           contentType: MediaType(type[0], type[1]),
         ));
       }
@@ -50,7 +66,9 @@ class PredictionApiService {
       final response = await http.Response.fromStream(streamed);
       ApiResponseHandler.logResponse(response);
       if (response.statusCode == 413) {
-        throw const ValidationException('Ukuran gambar melebihi batas 5 MB.');
+        throw const ValidationException(
+          'Ukuran gambar terlalu besar. Gunakan gambar maksimal 20 MB.',
+        );
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw ApiResponseHandler.exception(response);
@@ -62,8 +80,8 @@ class PredictionApiService {
       final body = Map<String, dynamic>.from(decoded);
       return DetectionResult.fromApiJson(
         body,
-        localImagePath: kIsWeb ? null : prepared.file.path,
-        localImageBytes: kIsWeb ? prepared.bytes : null,
+        localImagePath: _useWebBytes ? null : source.path,
+        localImageBytes: imageBytes,
       );
     } on ApiException {
       rethrow;
@@ -77,6 +95,25 @@ class PredictionApiService {
       throw const NetworkException();
     } on FormatException catch (e) {
       throw ValidationException(e.message);
+    }
+  }
+
+  static String _mimeType(String fileName) {
+    final extension = fileName.toLowerCase().split('.').last;
+    if (extension == 'jpg' || extension == 'jpeg') return 'image/jpeg';
+    if (extension == 'png') return 'image/png';
+    throw const FormatException('Format gambar harus JPG, JPEG, atau PNG.');
+  }
+
+  @visibleForTesting
+  static void validateImageSize(int sizeBytes) {
+    if (sizeBytes <= 0) {
+      throw const ValidationException('File gambar kosong.');
+    }
+    if (sizeBytes > maxImageSizeBytes) {
+      throw const ValidationException(
+        'Ukuran gambar terlalu besar. Gunakan gambar maksimal 20 MB.',
+      );
     }
   }
 

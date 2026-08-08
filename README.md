@@ -73,6 +73,11 @@ flutter run -d web-server --web-hostname=localhost --web-port=51039 \
   --dart-define=API_BASE_URL=http://203.145.35.191
 ```
 
+Foto dari kamera atau galeri dikirim sebagai `XFile` asli. Frontend tidak
+meminta kompresi, resize, crop, atau encode ulang dari `image_picker`; file JPG,
+JPEG, atau PNG divalidasi dengan batas maksimum 20 MB lalu dikirim langsung
+sebagai multipart field `file`.
+
 Android release:
 
 ```sh

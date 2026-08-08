@@ -70,7 +70,8 @@ void main() {
     expect(DetectionResult.fromApiJson(json).className, 'Dominant');
   });
 
-  test('old history without summary remains readable with fallback summary', () {
+  test('old history without summary remains readable with fallback summary',
+      () {
     final result = DetectionResult.fromJson({
       'id': 'old',
       'className': 'Robusta Grade B',
@@ -86,6 +87,28 @@ void main() {
     });
     expect(result.summary.total, 2);
     expect(result.summary.classCounts['Robusta Grade B'], 2);
+    expect(result.inputInfo, isEmpty);
+    expect(result.inferenceParameters, isEmpty);
+  });
+
+  test('parses and persists optional input and inference metadata', () {
+    final json = detected()
+      ..['input_info'] = {
+        'original_width': 3024,
+        'exif_transposed': true,
+      }
+      ..['inference_parameters'] = {
+        'image_size': 640,
+        'confidence_threshold': .5,
+      };
+    final result = DetectionResult.fromApiJson(json);
+    expect(result.inputInfo['original_width'], 3024);
+    expect(result.inputInfo['exif_transposed'], isTrue);
+    expect(result.inferenceParameters['image_size'], 640);
+
+    final restored = DetectionResult.fromJson(result.toJson());
+    expect(restored.inputInfo, result.inputInfo);
+    expect(restored.inferenceParameters, result.inferenceParameters);
   });
 
   test('clamps or ignores invalid bounding boxes', () {
